@@ -6,7 +6,9 @@ The current search horizon is the next four calendar months. Music styles come f
 
 Milestone 0 intentionally excludes accounts, payments, email delivery, cloud deployment, and LLM ranking.
 
-Related-artist discovery now uses the free MusicBrainz and ListenBrainz APIs. These services only decide which artists are worth checking; every displayed event must still be confirmed by Ticketmaster or JamBase. T2 requires a sourced related-artist match, while a T3 exploration result requires stronger multi-signal evidence. The optional paid LLM design is documented in [AI-assisted discovery guardrails](plans/ai-assisted-discovery.md) and is not enabled without explicit billing approval.
+Related-artist discovery now uses the free MusicBrainz and ListenBrainz APIs. These services only decide which artists are worth checking; every displayed event must still be confirmed by Ticketmaster or JamBase. T2 requires a sourced related-artist match, while T3 requires reliable style or performance-language affinity and is capped so exploration cannot overwhelm the shortlist. The optional paid LLM design is documented in [AI-assisted discovery guardrails](plans/ai-assisted-discovery.md) and is not enabled without explicit billing approval.
+
+Explicit artist searches use one bounded, confirmed alias fallback when the provider's stable identifier or primary spelling returns no events, or when a request fails with a recoverable network or server error. This helps catalogs that list an artist under an English stage name without allowing uncontrolled query expansion.
 
 ## Run locally
 
@@ -61,7 +63,7 @@ For each validation run, check:
 
 Performance language is a real ranking signal, but only when Front Row has reliable metadata for that artist or event. Unknown language is neutral rather than a negative score. In Milestone 0, this metadata is intentionally curated for a small set of validation artists, including Wang Leehom, Jay Chou, and Bruno Mars.
 
-Fixture data verifies the workflow and ranking logic. It does **not** measure Ticketmaster or JamBase coverage; only a live run can do that. Validation runs are not written to disk. Per-card feedback stays in this browser through local storage.
+Fixture data verifies the workflow and ranking logic. It does **not** measure Ticketmaster or JamBase coverage; only a live run can do that. The checked-in capability benchmark is an initial, human-labelled regression baseline rather than a claim about overall product accuracy. Run `npm run benchmark` to measure Favorite Recall and the current Precision@9 proxy on that frozen dataset. Validation runs are not written to disk. Per-card feedback stays in this browser through local storage.
 
 ## Commands
 
@@ -69,6 +71,7 @@ Fixture data verifies the workflow and ranking logic. It does **not** measure Ti
 npm run dev       # start local page and API
 npm test          # run deterministic core and provider tests
 npm run build     # type-check and build the page
+npm run benchmark # run the frozen capability baseline
 npm run build:city-index # refresh the checked-in city search data
 ```
 

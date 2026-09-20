@@ -17,6 +17,46 @@ export function preferredArtistQueryName(
 }
 
 /**
+ * Select one confirmed spelling variant for a bounded provider fallback.
+ * ASCII aliases are preferred because ticketing catalogs commonly register
+ * international artists under a Latin-script billing name. The caller is
+ * responsible for using this only for an explicit user preference.
+ */
+export function fallbackArtistQueryName(
+  artist: Pick<WeightedPreference, "aliases">,
+  confirmedAliases: readonly string[],
+  primaryQueryName?: string,
+): string | undefined {
+  const primaryKey = primaryQueryName
+    ?.normalize("NFKC")
+    .toLocaleLowerCase("en-US")
+    .trim();
+  const candidates = uniqueStrings([
+    ...(artist.aliases ?? []),
+    ...confirmedAliases,
+  ]).filter(
+    (alias) =>
+      alias.normalize("NFKC").toLocaleLowerCase("en-US").trim() !== primaryKey,
+  );
+
+  return (
+    candidates.find(
+      (alias) => /^[\x20-\x7E]+$/.test(alias) && /[A-Za-z]/.test(alias),
+    ) ?? candidates[0]
+  );
+}
+
+/** Network failures, throttling, timeouts, and server errors can be retried
+ * through one alternate catalog spelling. Authentication and other 4xx
+ * responses are deterministic and must not consume another provider call. */
+export function isRecoverableProviderError(error: unknown): boolean {
+  if (!(error instanceof Error)) return true;
+  const status = "status" in error ? (error as { status?: unknown }).status : undefined;
+  if (typeof status !== "number") return true;
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+/**
  * A provider radius is only a broad candidate filter. Route-time eligibility is
  * calculated later; 0.75 miles/minute gives a two-hour Bay Area search a
  * deliberately generous 90-mile envelope without pretending it is drive time.

@@ -94,10 +94,12 @@ describe("provider contract", () => {
   });
 
   it("keeps successful Ticketmaster results when an artist query fails", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse({ error: "temporary" }, 503))
-      .mockResolvedValue(jsonResponse(ticketmasterResponse));
+    let requestIndex = 0;
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      requestIndex++ === 0
+        ? jsonResponse({ error: "temporary" }, 503)
+        : jsonResponse(ticketmasterResponse),
+    );
     const provider = new TicketmasterProvider({
       apiKey: "tm_test_secret",
       fetch: fetcher,
@@ -107,8 +109,100 @@ describe("provider contract", () => {
 
     const events = await provider.fetchEvents(input);
 
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    const fallbackUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
+    expect(fallbackUrl.searchParams.get("keyword")).toBe("Wang Leehom");
     expect(events).toHaveLength(1);
+  });
+
+  it("falls back once from an empty Ticketmaster provider ID to a confirmed alias", async () => {
+    const explicitOnly = { ...input, artists: [input.artists[0]!] };
+    const fetcher = vi.fn<typeof fetch>(async (request) => {
+      const url = new URL(String(request));
+      return url.searchParams.get("keyword") === "Wang Leehom"
+        ? jsonResponse(ticketmasterResponse)
+        : jsonResponse({});
+    });
+    const provider = new TicketmasterProvider({
+      apiKey: "tm_test_secret",
+      fetch: fetcher,
+      now: () => NOW,
+      minRequestIntervalMs: 0,
+    });
+
+    const events = await provider.fetchEvents(explicitOnly);
+
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    const primaryUrl = new URL(String(fetcher.mock.calls[0]?.[0]));
+    const fallbackUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
+    expect(primaryUrl.searchParams.get("attractionId")).toBe("K8vZ9173-Uf");
+    expect(fallbackUrl.searchParams.has("attractionId")).toBe(false);
+    expect(fallbackUrl.searchParams.get("keyword")).toBe("Wang Leehom");
+    expect(events).toHaveLength(1);
+  });
+
+  it("uses only one fallback even when an explicit artist has twenty aliases", async () => {
+    const aliases = Array.from({ length: 20 }, (_, index) => `Alias ${index + 1}`);
+    const manyAliasInput: ValidationInput = {
+      ...input,
+      artists: [{ name: "Test Artist", weight: "priority", aliases }],
+      discoveryArtists: [],
+    };
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({}));
+    const provider = new TicketmasterProvider({
+      apiKey: "tm_test_secret",
+      fetch: fetcher,
+      now: () => NOW,
+      minRequestIntervalMs: 0,
+    });
+
+    await provider.fetchEvents(manyAliasInput);
+
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(
+      fetcher.mock.calls.map(([request]) =>
+        new URL(String(request)).searchParams.get("keyword"),
+      ),
+    ).toEqual(["Alias 1", "Alias 2", null]);
+  });
+
+  it("does not fan out aliases for discovery artists", async () => {
+    const discoveryInput: ValidationInput = {
+      ...input,
+      artists: [],
+      discoveryArtists: [
+        {
+          name: "Discovery Artist",
+          aliases: Array.from({ length: 20 }, (_, index) => `Discovery ${index + 1}`),
+          canonicalId: "musicbrainz:discovery",
+          musicBrainzId: "discovery",
+          evidence: [
+            {
+              source: "listenbrainz",
+              seedName: "Seed Artist",
+              seedWeight: "priority",
+              rank: 1,
+            },
+          ],
+        },
+      ],
+    };
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({}));
+    const provider = new TicketmasterProvider({
+      apiKey: "tm_test_secret",
+      fetch: fetcher,
+      now: () => NOW,
+      minRequestIntervalMs: 0,
+    });
+
+    await provider.fetchEvents(discoveryInput);
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(
+      fetcher.mock.calls.map(([request]) =>
+        new URL(String(request)).searchParams.get("keyword"),
+      ),
+    ).toEqual(["Discovery 1", null]);
   });
 
   it("uses JamBase v3 Bearer auth, User-Agent, and compatible filters", async () => {
@@ -155,10 +249,12 @@ describe("provider contract", () => {
   });
 
   it("keeps the JamBase regional result when its artist query fails", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse({ error: "temporary" }, 503))
-      .mockResolvedValue(jsonResponse(jambaseResponse));
+    let requestIndex = 0;
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      requestIndex++ === 0
+        ? jsonResponse({ error: "temporary" }, 503)
+        : jsonResponse(jambaseResponse),
+    );
     const provider = new JamBaseProvider({
       apiKey: "jbd_test_secret",
       fetch: fetcher,
@@ -167,7 +263,39 @@ describe("provider contract", () => {
 
     const events = await provider.fetchEvents(input);
 
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    const fallbackUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
+    expect(fallbackUrl.searchParams.get("artistName")).toBe("Wang Leehom");
+    expect(events).toHaveLength(1);
+  });
+
+  it("falls back from a Chinese JamBase query name to one confirmed English alias", async () => {
+    const chineseArtistInput: ValidationInput = {
+      ...input,
+      artists: [{ name: "万能青年旅店", weight: "priority" }],
+      discoveryArtists: [],
+    };
+    const fetcher = vi.fn<typeof fetch>(async (request) => {
+      const url = new URL(String(request));
+      return url.searchParams.get("artistName") === "Omnipotent Youth Society"
+        ? jsonResponse(jambaseResponse)
+        : jsonResponse({ events: [] });
+    });
+    const provider = new JamBaseProvider({
+      apiKey: "jbd_test_secret",
+      fetch: fetcher,
+      now: () => NOW,
+    });
+
+    const events = await provider.fetchEvents(chineseArtistInput);
+
     expect(fetcher).toHaveBeenCalledTimes(3);
+    const primaryUrl = new URL(String(fetcher.mock.calls[0]?.[0]));
+    const fallbackUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
+    expect(primaryUrl.searchParams.get("artistName")).toBe("万能青年旅店");
+    expect(fallbackUrl.searchParams.get("artistName")).toBe(
+      "Omnipotent Youth Society",
+    );
     expect(events).toHaveLength(1);
   });
 

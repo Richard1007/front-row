@@ -12,7 +12,9 @@ import {
   canonicalEventKey,
   coordinates,
   deduplicateProviderEvents,
+  fallbackArtistQueryName,
   inactiveStatusFromEventTitle,
+  isRecoverableProviderError,
   mapEventStatus,
   preferredArtistQueryName,
   requestSignal,
@@ -22,6 +24,12 @@ import {
 
 const DEFAULT_BASE_URL = "https://api.data.jambase.com/v3";
 type JsonRecord = Record<string, unknown>;
+
+interface JamBaseQuery {
+  params: URLSearchParams;
+  fallbackName?: string;
+  explicit: boolean;
+}
 
 export interface JamBaseProviderOptions extends ProviderDependencies {
   apiKey?: string;
@@ -64,7 +72,8 @@ export class JamBaseProvider implements EventProvider {
   }
 
   async fetchEvents(input: ValidationInput): Promise<NormalizedEvent[]> {
-    if (!this.apiKey) {
+    const apiKey = this.apiKey;
+    if (!apiKey) {
       throw new ProviderUnavailableError(this.id, "JamBase 未配置服务端 API key。");
     }
 
@@ -79,58 +88,108 @@ export class JamBaseProvider implements EventProvider {
       perPage: "100",
       page: "1",
     };
-    const directArtists = [
-      ...input.artists,
-      ...(input.discoveryArtists ?? []).slice(0, 12)
-    ];
-    const queries: URLSearchParams[] = directArtists.map((artist) => {
+    const explicitQueries: JamBaseQuery[] = input.artists.map((artist) => {
       const profile = findArtistProfile(artist.name, artist.canonicalId) ??
         artist.aliases?.map((alias) => findArtistProfile(alias)).find(Boolean);
       const artistId = profile?.providerIds?.jambase;
-      return new URLSearchParams(
-        artistId
-          ? { ...commonParams, artistId }
-          : { ...commonParams, artistName: preferredArtistQueryName(artist) },
-      );
+      const artistName = artistId ? undefined : preferredArtistQueryName(artist);
+      return {
+        params: new URLSearchParams(
+          artistId
+            ? { ...commonParams, artistId }
+            : { ...commonParams, artistName: artistName! },
+        ),
+        fallbackName: fallbackArtistQueryName(
+          artist,
+          profile?.aliases ?? [],
+          artistName,
+        ),
+        explicit: true,
+      };
     });
-    queries.push(new URLSearchParams(commonParams));
+    const discoveryQueries: JamBaseQuery[] = (input.discoveryArtists ?? [])
+      .slice(0, 12)
+      .map((artist) => {
+        const profile = findArtistProfile(artist.name, artist.canonicalId) ??
+          artist.aliases?.map((alias) => findArtistProfile(alias)).find(Boolean);
+        const artistId = profile?.providerIds?.jambase;
+        return {
+          params: new URLSearchParams(
+            artistId
+              ? { ...commonParams, artistId }
+              : { ...commonParams, artistName: preferredArtistQueryName(artist) },
+          ),
+          explicit: false,
+        };
+      });
+    const queries: JamBaseQuery[] = [
+      ...explicitQueries,
+      ...discoveryQueries,
+      { params: new URLSearchParams(commonParams), explicit: false },
+    ];
 
     const allEvents: NormalizedEvent[] = [];
     const errors: Error[] = [];
     let successfulQueries = 0;
 
-    // Keep requests serial to avoid consuming the small pilot quota in bursts.
-    for (const params of queries) {
-      try {
-        const response = await this.fetcher(`${this.baseUrl}/events?${params}`, {
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${this.apiKey}`,
-            "User-Agent": this.userAgent,
-          },
-          signal: requestSignal(this.timeoutMs),
-        });
-        if (!response.ok) {
-          throw new ProviderRequestError(
-            this.id,
-            `JamBase request failed (${response.status}).`,
-            response.status,
-          );
-        }
-
-        const payload = (await response.json()) as JsonRecord;
-        const events = Array.isArray(payload.events) ? payload.events : [];
-        for (const event of events) {
-          const normalized = normalizeJamBaseEvent(event, now);
-          if (normalized) allEvents.push(normalized);
-        }
-        successfulQueries += 1;
-      } catch (error) {
-        errors.push(
-          error instanceof Error
-            ? error
-            : new ProviderRequestError(this.id, "JamBase request failed."),
+    const requestQuery = async (
+      params: URLSearchParams,
+    ): Promise<{ events: NormalizedEvent[]; rawEventCount: number }> => {
+      const response = await this.fetcher(`${this.baseUrl}/events?${params}`, {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          "User-Agent": this.userAgent,
+        },
+        signal: requestSignal(this.timeoutMs),
+      });
+      if (!response.ok) {
+        throw new ProviderRequestError(
+          this.id,
+          `JamBase request failed (${response.status}).`,
+          response.status,
         );
+      }
+
+      const payload = (await response.json()) as JsonRecord;
+      const rawEvents = Array.isArray(payload.events) ? payload.events : [];
+      const events = rawEvents
+        .map((event) => normalizeJamBaseEvent(event, now))
+        .filter((event): event is NormalizedEvent => Boolean(event));
+      return { events, rawEventCount: rawEvents.length };
+    };
+
+    const recordFailure = (error: unknown): Error => {
+      const failure = error instanceof Error
+        ? error
+        : new ProviderRequestError(this.id, "JamBase request failed.");
+      errors.push(failure);
+      return failure;
+    };
+
+    // Keep requests serial to avoid consuming the small pilot quota in bursts.
+    for (const query of queries) {
+      let shouldFallback = false;
+      try {
+        const result = await requestQuery(query.params);
+        allEvents.push(...result.events);
+        successfulQueries += 1;
+        shouldFallback = query.explicit && result.rawEventCount === 0;
+      } catch (error) {
+        const failure = recordFailure(error);
+        shouldFallback = query.explicit && isRecoverableProviderError(failure);
+      }
+
+      if (shouldFallback && query.fallbackName) {
+        try {
+          const fallbackParams = new URLSearchParams(commonParams);
+          fallbackParams.set("artistName", query.fallbackName);
+          const fallback = await requestQuery(fallbackParams);
+          allEvents.push(...fallback.events);
+          successfulQueries += 1;
+        } catch (error) {
+          recordFailure(error);
+        }
       }
     }
 

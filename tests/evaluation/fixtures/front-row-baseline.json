@@ -1,0 +1,368 @@
+{
+  "id": "front-row-baseline-v1",
+  "description": "Deterministic Bay Area shortlist covering favorite aliases, exact priority, discovery fill, cancellation, and distance boundaries.",
+  "now": "2026-09-20T12:00:00.000Z",
+  "precisionK": 9,
+  "input": {
+    "artists": [
+      {
+        "name": "王力宏",
+        "aliases": ["Wang Leehom", "Leehom Wang"],
+        "canonicalId": "frontrow:artist:wang-leehom",
+        "weight": "priority"
+      },
+      {
+        "name": "陶喆",
+        "aliases": ["David Tao"],
+        "canonicalId": "musicbrainz:38fe7fb3-2bde-4672-8016-2ba6f7d1808f",
+        "weight": "like"
+      },
+      {
+        "name": "Radiohead",
+        "canonicalId": "musicbrainz:radiohead",
+        "weight": "occasional"
+      }
+    ],
+    "genres": [
+      { "name": "R&B", "weight": "priority" },
+      { "name": "Mandopop", "weight": "priority" },
+      { "name": "Alternative", "weight": "like" }
+    ],
+    "languages": [],
+    "languageMode": "any",
+    "origin": {
+      "label": "Oakland, CA",
+      "latitude": 37.8044,
+      "longitude": -122.2712
+    },
+    "maxTravelMinutes": 120,
+    "forecastMonths": 4
+  },
+  "knownFavoriteShows": [
+    { "artist": "王力宏", "eventKeys": ["favorite-wang-alias"] },
+    { "artist": "陶喆", "eventKeys": ["favorite-tao-alias"] },
+    { "artist": "Radiohead", "eventKeys": ["favorite-radiohead"] }
+  ],
+  "relevanceLabels": {
+    "favorite-wang-alias": true,
+    "favorite-tao-alias": true,
+    "favorite-radiohead": true,
+    "related-jj-lin": true,
+    "related-dangelo": true,
+    "related-the-smile": true,
+    "related-muse": false,
+    "discovery-rnb": true,
+    "discovery-mandopop": true,
+    "discovery-alternative": false,
+    "cancelled-wang": false,
+    "far-wang": false
+  },
+  "expectedExcludedEventKeys": [
+    "cancelled-wang",
+    "far-wang"
+  ],
+  "events": [
+    {
+      "canonicalKey": "favorite-wang-alias",
+      "name": "Wang Leehom Live in San Jose",
+      "startAt": "2026-12-20T04:00:00.000Z",
+      "status": "active",
+      "venue": {
+        "name": "SAP Center",
+        "city": "San Jose",
+        "region": "CA",
+        "coordinates": { "latitude": 37.3328, "longitude": -121.9012 }
+      },
+      "performers": [{ "name": "Wang Leehom", "role": "headliner" }],
+      "genres": ["Mandopop"],
+      "languages": [],
+      "sources": [{
+        "provider": "ticketmaster",
+        "eventId": "tm-wang-alias",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    },
+    {
+      "canonicalKey": "favorite-tao-alias",
+      "name": "David Tao Soul Power II",
+      "startAt": "2026-11-08T04:00:00.000Z",
+      "status": "active",
+      "venue": {
+        "name": "Oakland Arena",
+        "city": "Oakland",
+        "region": "CA",
+        "coordinates": { "latitude": 37.7503, "longitude": -122.2028 }
+      },
+      "performers": [{ "name": "David Tao", "role": "headliner" }],
+      "genres": ["R&B", "Mandopop"],
+      "languages": [],
+      "onSaleAt": "2026-09-28T17:00:00.000Z",
+      "sources": [{
+        "provider": "jambase",
+        "eventId": "jb-tao-alias",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    },
+    {
+      "canonicalKey": "favorite-radiohead",
+      "name": "Radiohead Live",
+      "startAt": "2026-10-21T03:00:00.000Z",
+      "status": "active",
+      "venue": {
+        "name": "Greek Theatre",
+        "city": "Berkeley",
+        "region": "CA",
+        "coordinates": { "latitude": 37.8736, "longitude": -122.2548 }
+      },
+      "performers": [{
+        "name": "Radiohead",
+        "canonicalId": "musicbrainz:radiohead",
+        "role": "headliner"
+      }],
+      "genres": ["Alternative"],
+      "languages": [],
+      "sources": [{
+        "provider": "ticketmaster",
+        "eventId": "tm-radiohead",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    },
+    {
+      "canonicalKey": "related-jj-lin",
+      "name": "JJ Lin Live",
+      "startAt": "2026-10-30T03:00:00.000Z",
+      "status": "active",
+      "venue": {
+        "name": "Bill Graham Civic Auditorium",
+        "city": "San Francisco",
+        "region": "CA",
+        "coordinates": { "latitude": 37.778, "longitude": -122.4173 }
+      },
+      "performers": [{
+        "name": "JJ Lin",
+        "canonicalId": "musicbrainz:jj-lin",
+        "role": "headliner",
+        "similarTo": [{
+          "preferenceCanonicalId": "frontrow:artist:wang-leehom",
+          "score": 0.84,
+          "confidence": 0.9,
+          "source": "listenbrainz"
+        }]
+      }],
+      "genres": ["Mandopop"],
+      "languages": [],
+      "sources": [{
+        "provider": "jambase",
+        "eventId": "jb-jj-lin",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    },
+    {
+      "canonicalKey": "related-dangelo",
+      "name": "D'Angelo Live",
+      "startAt": "2026-11-15T04:00:00.000Z",
+      "status": "active",
+      "venue": {
+        "name": "The Masonic",
+        "city": "San Francisco",
+        "region": "CA",
+        "coordinates": { "latitude": 37.7912, "longitude": -122.4129 }
+      },
+      "performers": [{
+        "name": "D'Angelo",
+        "canonicalId": "musicbrainz:dangelo",
+        "role": "headliner",
+        "similarTo": [{
+          "preferenceCanonicalId": "musicbrainz:38fe7fb3-2bde-4672-8016-2ba6f7d1808f",
+          "score": 0.85,
+          "confidence": 0.95,
+          "source": "manual"
+        }]
+      }],
+      "genres": ["R&B"],
+      "languages": [],
+      "sources": [{
+        "provider": "ticketmaster",
+        "eventId": "tm-dangelo",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    },
+    {
+      "canonicalKey": "related-the-smile",
+      "name": "The Smile Live",
+      "startAt": "2026-12-05T04:00:00.000Z",
+      "status": "active",
+      "venue": {
+        "name": "Fox Theater",
+        "city": "Oakland",
+        "region": "CA",
+        "coordinates": { "latitude": 37.808, "longitude": -122.2707 }
+      },
+      "performers": [{
+        "name": "The Smile",
+        "canonicalId": "musicbrainz:the-smile",
+        "role": "headliner",
+        "similarTo": [{
+          "preferenceCanonicalId": "musicbrainz:radiohead",
+          "score": 0.82,
+          "confidence": 0.95,
+          "source": "manual"
+        }]
+      }],
+      "genres": ["Alternative"],
+      "languages": [],
+      "sources": [{
+        "provider": "ticketmaster",
+        "eventId": "tm-the-smile",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    },
+    {
+      "canonicalKey": "related-muse",
+      "name": "Muse Live",
+      "startAt": "2027-01-05T04:00:00.000Z",
+      "status": "active",
+      "venue": {
+        "name": "Chase Center",
+        "city": "San Francisco",
+        "region": "CA",
+        "coordinates": { "latitude": 37.768, "longitude": -122.3877 }
+      },
+      "performers": [{
+        "name": "Muse",
+        "canonicalId": "musicbrainz:muse",
+        "role": "headliner",
+        "similarTo": [{
+          "preferenceCanonicalId": "musicbrainz:radiohead",
+          "score": 0.7,
+          "confidence": 0.8,
+          "source": "listenbrainz"
+        }]
+      }],
+      "genres": ["Alternative"],
+      "languages": [],
+      "sources": [{
+        "provider": "jambase",
+        "eventId": "jb-muse",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    },
+    {
+      "canonicalKey": "discovery-rnb",
+      "name": "Bay Area R&B Showcase",
+      "startAt": "2026-10-11T03:00:00.000Z",
+      "status": "active",
+      "venue": {
+        "name": "The New Parish",
+        "city": "Oakland",
+        "region": "CA",
+        "coordinates": { "latitude": 37.8063, "longitude": -122.2697 }
+      },
+      "performers": [{ "name": "Local Soul Collective", "role": "headliner" }],
+      "genres": ["R&B"],
+      "languages": [],
+      "sources": [{
+        "provider": "jambase",
+        "eventId": "jb-rnb-showcase",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    },
+    {
+      "canonicalKey": "discovery-mandopop",
+      "name": "Mandopop Night",
+      "startAt": "2026-12-12T04:00:00.000Z",
+      "status": "active",
+      "venue": {
+        "name": "The UC Theatre",
+        "city": "Berkeley",
+        "region": "CA",
+        "coordinates": { "latitude": 37.8717, "longitude": -122.2681 }
+      },
+      "performers": [{ "name": "Mandarin Pop Ensemble", "role": "headliner" }],
+      "genres": ["Mandopop"],
+      "languages": [{
+        "language": "cmn",
+        "role": "primary",
+        "confidence": 0.9,
+        "source": "manual"
+      }],
+      "sources": [{
+        "provider": "ticketmaster",
+        "eventId": "tm-mandopop-night",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    },
+    {
+      "canonicalKey": "discovery-alternative",
+      "name": "Alternative Rock Night",
+      "startAt": "2026-12-18T04:00:00.000Z",
+      "status": "active",
+      "venue": {
+        "name": "Bottom of the Hill",
+        "city": "San Francisco",
+        "region": "CA",
+        "coordinates": { "latitude": 37.7647, "longitude": -122.3962 }
+      },
+      "performers": [{ "name": "Unknown Alternative Band", "role": "headliner" }],
+      "genres": ["Alternative"],
+      "languages": [],
+      "sources": [{
+        "provider": "jambase",
+        "eventId": "jb-alt-night",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    },
+    {
+      "canonicalKey": "cancelled-wang",
+      "name": "Wang Leehom Cancelled",
+      "startAt": "2026-11-20T04:00:00.000Z",
+      "status": "cancelled",
+      "venue": {
+        "name": "Oakland Arena",
+        "city": "Oakland",
+        "region": "CA",
+        "coordinates": { "latitude": 37.7503, "longitude": -122.2028 }
+      },
+      "performers": [{ "name": "Wang Leehom", "role": "headliner" }],
+      "genres": ["Mandopop"],
+      "languages": [],
+      "sources": [{
+        "provider": "ticketmaster",
+        "eventId": "tm-cancelled-wang",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    },
+    {
+      "canonicalKey": "far-wang",
+      "name": "Wang Leehom New York",
+      "startAt": "2026-12-02T04:00:00.000Z",
+      "status": "active",
+      "venue": {
+        "name": "Madison Square Garden",
+        "city": "New York",
+        "region": "NY",
+        "coordinates": { "latitude": 40.7505, "longitude": -73.9934 }
+      },
+      "performers": [{ "name": "Wang Leehom", "role": "headliner" }],
+      "genres": ["Mandopop"],
+      "languages": [],
+      "sources": [{
+        "provider": "ticketmaster",
+        "eventId": "tm-far-wang",
+        "fetchedAt": "2026-09-20T12:00:00.000Z",
+        "mode": "fixture"
+      }]
+    }
+  ]
+}

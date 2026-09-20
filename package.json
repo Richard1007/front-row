@@ -12,6 +12,7 @@
     "dev:server": "tsx watch src/server/index.ts",
     "dev:client": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
+    "benchmark": "tsx src/evaluation/cli.ts tests/evaluation/fixtures/front-row-baseline.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "tsx src/server/index.ts"

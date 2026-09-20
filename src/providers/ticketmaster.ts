@@ -13,7 +13,9 @@ import {
   coordinates,
   deduplicateProviderEvents,
   encodeGeohash,
+  fallbackArtistQueryName,
   inactiveStatusFromEventTitle,
+  isRecoverableProviderError,
   mapEventStatus,
   preferredArtistQueryName,
   requestSignal,
@@ -24,6 +26,13 @@ import {
 const DEFAULT_BASE_URL = "https://app.ticketmaster.com/discovery/v2";
 
 type JsonRecord = Record<string, unknown>;
+
+interface TicketmasterQuery {
+  attractionId?: string;
+  keyword?: string;
+  fallbackKeyword?: string;
+  explicit: boolean;
+}
 
 export interface TicketmasterProviderOptions extends ProviderDependencies {
   apiKey?: string;
@@ -67,7 +76,8 @@ export class TicketmasterProvider implements EventProvider {
   }
 
   async fetchEvents(input: ValidationInput): Promise<NormalizedEvent[]> {
-    if (!this.apiKey) {
+    const apiKey = this.apiKey;
+    if (!apiKey) {
       throw new ProviderUnavailableError(
         this.id,
         "Ticketmaster 未配置服务端 API key。",
@@ -75,36 +85,53 @@ export class TicketmasterProvider implements EventProvider {
     }
 
     const now = this.now();
-    const directArtists = [
-      ...input.artists,
-      ...(input.discoveryArtists ?? []).slice(0, 12)
-    ];
-    const artistQueries = directArtists.map((artist) => {
+    const explicitQueries: TicketmasterQuery[] = input.artists.map((artist) => {
       const profile = findArtistProfile(artist.name, artist.canonicalId) ??
         artist.aliases?.map((alias) => findArtistProfile(alias)).find(Boolean);
       const attractionId = profile?.providerIds?.ticketmaster;
-      return attractionId
-        ? { attractionId }
-        : { keyword: preferredArtistQueryName(artist) };
+      const keyword = attractionId ? undefined : preferredArtistQueryName(artist);
+      return {
+        attractionId,
+        keyword,
+        fallbackKeyword: fallbackArtistQueryName(
+          artist,
+          profile?.aliases ?? [],
+          keyword,
+        ),
+        explicit: true,
+      };
     });
+    const discoveryQueries: TicketmasterQuery[] = (input.discoveryArtists ?? [])
+      .slice(0, 12)
+      .map((artist) => {
+        const profile = findArtistProfile(artist.name, artist.canonicalId) ??
+          artist.aliases?.map((alias) => findArtistProfile(alias)).find(Boolean);
+        const attractionId = profile?.providerIds?.ticketmaster;
+        return attractionId
+          ? { attractionId, explicit: false }
+          : { keyword: preferredArtistQueryName(artist), explicit: false };
+      });
     // Exact artist queries protect recall. The final un-keyworded regional query
     // supplies discovery candidates for genre/language scoring.
-    const queries: Array<{ attractionId?: string; keyword?: string }> = [
-      ...artistQueries,
-      {},
+    const queries: TicketmasterQuery[] = [
+      ...explicitQueries,
+      ...discoveryQueries,
+      { explicit: false },
     ];
     const allEvents: NormalizedEvent[] = [];
     const errors: Error[] = [];
     let successfulQueries = 0;
 
-    // Direct artist queries protect long-tail artists from a popularity-ranked
-    // regional feed. Keep these serial to be conservative with provider quotas.
-    for (const [index, query] of queries.entries()) {
-      if (index > 0 && this.minRequestIntervalMs > 0) {
+    let requestCount = 0;
+    const requestQuery = async (
+      query: Pick<TicketmasterQuery, "attractionId" | "keyword">,
+    ): Promise<{ events: NormalizedEvent[]; rawEventCount: number }> => {
+      if (requestCount > 0 && this.minRequestIntervalMs > 0) {
         await delay(this.minRequestIntervalMs);
       }
+      requestCount += 1;
       const params = new URLSearchParams({
-        apikey: this.apiKey,
+        apikey: apiKey,
         classificationName: "Music",
         startDateTime: ticketmasterDateTime(now),
         endDateTime: ticketmasterDateTime(forecastEnd(now, input.forecastMonths)),
@@ -121,33 +148,57 @@ export class TicketmasterProvider implements EventProvider {
       if (query.attractionId) params.set("attractionId", query.attractionId);
       else if (query.keyword) params.set("keyword", query.keyword);
 
-      try {
-        const response = await this.fetcher(`${this.baseUrl}/events.json?${params}`, {
-          headers: { Accept: "application/json" },
-          signal: requestSignal(this.timeoutMs),
-        });
-        if (!response.ok) {
-          throw new ProviderRequestError(
-            this.id,
-            `Ticketmaster request failed (${response.status}).`,
-            response.status,
-          );
-        }
-
-        const payload = (await response.json()) as JsonRecord;
-        const embedded = record(payload._embedded);
-        const events = array(embedded?.events);
-        for (const event of events) {
-          const normalized = normalizeTicketmasterEvent(event, now);
-          if (normalized) allEvents.push(normalized);
-        }
-        successfulQueries += 1;
-      } catch (error) {
-        errors.push(
-          error instanceof Error
-            ? error
-            : new ProviderRequestError(this.id, "Ticketmaster request failed."),
+      const response = await this.fetcher(`${this.baseUrl}/events.json?${params}`, {
+        headers: { Accept: "application/json" },
+        signal: requestSignal(this.timeoutMs),
+      });
+      if (!response.ok) {
+        throw new ProviderRequestError(
+          this.id,
+          `Ticketmaster request failed (${response.status}).`,
+          response.status,
         );
+      }
+
+      const payload = (await response.json()) as JsonRecord;
+      const embedded = record(payload._embedded);
+      const rawEvents = array(embedded?.events);
+      const events = rawEvents
+        .map((event) => normalizeTicketmasterEvent(event, now))
+        .filter((event): event is NormalizedEvent => Boolean(event));
+      return { events, rawEventCount: rawEvents.length };
+    };
+
+    const recordFailure = (error: unknown): Error => {
+      const failure = error instanceof Error
+        ? error
+        : new ProviderRequestError(this.id, "Ticketmaster request failed.");
+      errors.push(failure);
+      return failure;
+    };
+
+    // Direct artist queries protect long-tail artists from a popularity-ranked
+    // regional feed. Keep these serial to be conservative with provider quotas.
+    for (const query of queries) {
+      let shouldFallback = false;
+      try {
+        const result = await requestQuery(query);
+        allEvents.push(...result.events);
+        successfulQueries += 1;
+        shouldFallback = query.explicit && result.rawEventCount === 0;
+      } catch (error) {
+        const failure = recordFailure(error);
+        shouldFallback = query.explicit && isRecoverableProviderError(failure);
+      }
+
+      if (shouldFallback && query.fallbackKeyword) {
+        try {
+          const fallback = await requestQuery({ keyword: query.fallbackKeyword });
+          allEvents.push(...fallback.events);
+          successfulQueries += 1;
+        } catch (error) {
+          recordFailure(error);
+        }
       }
     }
 
