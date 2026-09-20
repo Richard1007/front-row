@@ -3,8 +3,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { pathToFileURL } from "node:url";
 import {
-  buildRecommendations,
-  deduplicateEvents,
+  buildRecommendationSelection,
   enrichValidationInput,
   safeValidateInput,
 } from "../core/index.js";
@@ -12,12 +11,14 @@ import type { ProviderCapability, ValidationResult } from "../core/types.js";
 import {
   applyExpansionEvidence,
   expandArtistPreferences,
+  inferArtistGenres,
+  inferArtistLanguagePreferences,
   ListenBrainzClient,
   MusicBrainzClient
 } from "../discovery/index.js";
 import { createProviderRegistry } from "../providers/index.js";
 import { normalizeLocationQuery, searchLocations } from "./locations.js";
-import { deriveDataMode } from "./result.js";
+import { deriveDataMode, recommendationCoverage } from "./result.js";
 
 const app = new Hono();
 const registry = createProviderRegistry();
@@ -82,6 +83,22 @@ app.post("/api/validation-runs", async (context) => {
   }
 
   const enrichedInput = enrichValidationInput(parsed.data);
+  const inferredLanguageProfile = await inferArtistLanguagePreferences(
+    enrichedInput.artists,
+    { resolveArtist: (name) => musicBrainz.resolveExactArtist(name) }
+  );
+  const inferredGenreProfile = await inferArtistGenres(enrichedInput.artists, {
+    resolveArtist: (name) => musicBrainz.resolveExactArtist(name)
+  });
+  const rankingInput = {
+    ...enrichedInput,
+    inferredLanguages: inferredLanguageProfile.distribution,
+    inferredGenres: inferredGenreProfile.signals.map((signal) => ({
+      name: signal.genre,
+      percentage: signal.percentage,
+      confidence: signal.confidence
+    }))
+  };
   const expansion = await expandArtistPreferences(enrichedInput.artists, {
     resolveArtist: (name) => musicBrainz.resolveExactArtist(name),
     similarArtists: (musicBrainzId, limit) =>
@@ -104,13 +121,13 @@ app.post("/api/validation-runs", async (context) => {
     })
   );
   const retrievalInput = {
-    ...enrichedInput,
+    ...rankingInput,
     discoveryArtists: hydratedCandidates
   };
   const { events, diagnostics } = await registry.fetchEvents(retrievalInput);
   const eventsWithSimilarity = applyExpansionEvidence(events, hydratedCandidates);
-  const deduplicated = deduplicateEvents(eventsWithSimilarity);
-  const recommendations = buildRecommendations(enrichedInput, deduplicated);
+  const selection = buildRecommendationSelection(rankingInput, eventsWithSimilarity);
+  const recommendations = selection.recommendations;
   const dataMode = deriveDataMode(events, diagnostics);
 
   const result: ValidationResult = {
@@ -124,13 +141,16 @@ app.post("/api/validation-runs", async (context) => {
       candidateArtists: hydratedCandidates.map((candidate) => candidate.name),
       unresolvedSeeds: expansion.diagnostics
         .filter((diagnostic) => diagnostic.status !== "expanded")
-        .map((diagnostic) => diagnostic.seedName)
+        .map((diagnostic) => diagnostic.seedName),
+      inferredLanguages: inferredLanguageProfile.distribution,
+      unknownLanguagePercentage: inferredLanguageProfile.unknownPercentage,
+      inferredGenres: inferredGenreProfile.signals.map((signal) => ({
+        name: signal.genre,
+        percentage: signal.percentage,
+        confidence: signal.confidence
+      }))
     },
-    coverage: {
-      rawEvents: events.length,
-      deduplicatedEvents: deduplicated.length,
-      eligibleEvents: recommendations.length
-    }
+    coverage: recommendationCoverage(events.length, selection.funnel)
   };
 
   return context.json(result);

@@ -52,6 +52,35 @@ export const MILESTONE_ZERO_ARTIST_PROFILES: readonly CuratedArtistProfile[] = [
     languages: [
       { language: "en", role: "primary", confidence: 0.95, source: "manual" }
     ]
+  },
+  {
+    canonicalId: "musicbrainz:4cd1ce8c-469e-4ff6-a987-59819b975a85",
+    displayName: "万能青年旅店",
+    aliases: [
+      "万能青年旅店",
+      "萬能青年旅店",
+      "万青",
+      "Omnipotent Youth Society",
+      "Wànnéng Qīngnián Lǚdiàn"
+    ],
+    languages: [
+      { language: "cmn", role: "primary", confidence: 0.95, source: "manual" }
+    ]
+  },
+  {
+    canonicalId: "musicbrainz:38fe7fb3-2bde-4672-8016-2ba6f7d1808f",
+    displayName: "陶喆",
+    aliases: [
+      "陶喆",
+      "陶吉吉",
+      "David Tao",
+      "David Zee Tao",
+      "Zhe Tao"
+    ],
+    languages: [
+      { language: "cmn", role: "primary", confidence: 0.95, source: "manual" },
+      { language: "en", role: "occasional", confidence: 0.75, source: "manual" }
+    ]
   }
 ] as const;
 

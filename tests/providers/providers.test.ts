@@ -3,7 +3,7 @@ import jambaseResponse from "../../fixtures/providers/jambase-events-response.js
 import ticketmasterResponse from "../../fixtures/providers/ticketmaster-events-response.json";
 import type { NormalizedEvent, ValidationInput } from "../../src/core/types";
 import { FixtureProvider } from "../../src/providers/fixture";
-import { JamBaseProvider } from "../../src/providers/jambase";
+import { JamBaseProvider, normalizeJamBaseEvent } from "../../src/providers/jambase";
 import { createProviderRegistry } from "../../src/providers/providerRegistry";
 import { StubHubProvider } from "../../src/providers/stubhub";
 import {
@@ -169,6 +169,56 @@ describe("provider contract", () => {
 
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(events).toHaveLength(1);
+  });
+
+  it("marks explicit postponed and cancelled title listings inactive", () => {
+    const postponedTicketmaster = structuredClone(ticketmasterResponse._embedded.events[0]!);
+    postponedTicketmaster.name =
+      "Pablo Cruise [Event Postponed to 12/6 at Uptown Theatre Napa]";
+    const cancelledJamBase = structuredClone(jambaseResponse.events[0]!);
+    cancelledJamBase.name = "Artist Live — Event Canceled";
+
+    const ticketmaster = normalizeTicketmasterEvent(postponedTicketmaster, NOW);
+    const jambase = normalizeJamBaseEvent(cancelledJamBase, NOW);
+
+    expect(ticketmaster).toMatchObject({
+      status: "postponed",
+      notes: expect.arrayContaining([
+        "Provider title indicates an obsolete postponed or rescheduled listing",
+      ]),
+    });
+    expect(jambase).toMatchObject({
+      status: "cancelled",
+      notes: expect.arrayContaining(["Provider title indicates a cancelled listing"]),
+    });
+  });
+
+  it("marks explicit old reschedule targets inactive for both providers", () => {
+    const ticketmasterFixture = structuredClone(ticketmasterResponse._embedded.events[0]!);
+    ticketmasterFixture.name = "Artist Live — Event Rescheduled to December 6";
+    const jambaseFixture = structuredClone(jambaseResponse.events[0]!);
+    jambaseFixture.name = "Artist Live moved to a new venue";
+
+    expect(normalizeTicketmasterEvent(ticketmasterFixture, NOW)?.status).toBe("postponed");
+    expect(normalizeJamBaseEvent(jambaseFixture, NOW)?.status).toBe("postponed");
+  });
+
+  it("keeps a replacement show labelled as a rescheduled date active", () => {
+    const ticketmasterFixture = structuredClone(ticketmasterResponse._embedded.events[0]!);
+    ticketmasterFixture.name = "Artist Live — Rescheduled Date";
+    ticketmasterFixture.dates.status.code = "rescheduled";
+    const jambaseFixture = structuredClone(jambaseResponse.events[0]!);
+    jambaseFixture.name = "Artist Live (Rescheduled Date)";
+    jambaseFixture.eventStatus = "rescheduled";
+
+    expect(normalizeTicketmasterEvent(ticketmasterFixture, NOW)).toMatchObject({
+      status: "active",
+      notes: ["Ticketmaster status: rescheduled"],
+    });
+    expect(normalizeJamBaseEvent(jambaseFixture, NOW)).toMatchObject({
+      status: "active",
+      notes: ["JamBase status: rescheduled"],
+    });
   });
 
   it("rejects hostile or malformed outbound provider URLs", () => {

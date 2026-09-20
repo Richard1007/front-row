@@ -13,6 +13,7 @@ import {
   coordinates,
   deduplicateProviderEvents,
   encodeGeohash,
+  inactiveStatusFromEventTitle,
   mapEventStatus,
   preferredArtistQueryName,
   requestSignal,
@@ -210,15 +211,24 @@ export function normalizeTicketmasterEvent(
   const publicSale = record(sales?.public);
   const status = record(dates?.status);
   const rawStatus = text(status?.code);
-  const notes = rawStatus?.toLocaleLowerCase("en-US").includes("rescheduled")
-    ? ["Ticketmaster status: rescheduled"]
-    : undefined;
+  const providerStatus = mapEventStatus(rawStatus);
+  const titleStatus = inactiveStatusFromEventTitle(name);
+  const normalizedStatus =
+    providerStatus === "cancelled" || providerStatus === "postponed"
+      ? providerStatus
+      : (titleStatus?.status ?? providerStatus);
+  const notes = uniqueStrings([
+    rawStatus?.toLocaleLowerCase("en-US").includes("rescheduled")
+      ? "Ticketmaster status: rescheduled"
+      : undefined,
+    titleStatus?.note,
+  ]);
 
   return {
     canonicalKey: canonicalEventKey(name, startAt, venueName),
     name,
     startAt,
-    status: mapEventStatus(rawStatus),
+    status: normalizedStatus,
     venue: {
       name: venueName,
       city: text(city?.name),
@@ -238,7 +248,7 @@ export function normalizeTicketmasterEvent(
       },
     ],
     onSaleAt: text(publicSale?.startDateTime),
-    notes,
+    notes: notes.length > 0 ? notes : undefined,
   };
 }
 

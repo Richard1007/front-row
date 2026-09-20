@@ -18,6 +18,12 @@ const WEIGHT_ORDER: Readonly<Record<ImportanceLevel, number>> = {
   occasional: 2
 };
 
+const ALLOCATION_CREDITS: Readonly<Record<ImportanceLevel, number>> = {
+  priority: 3,
+  like: 2,
+  occasional: 1
+};
+
 export interface ArtistExpansionDependencies {
   resolveArtist: (name: string) => Promise<ResolvedMusicBrainzArtist | undefined>;
   similarArtists: (
@@ -51,7 +57,6 @@ export async function expandArtistPreferences(
   const maxCandidates = Math.max(0, Math.floor(dependencies.maxCandidates ?? 20));
   const perSeedLimits = { ...DEFAULT_PER_SEED_LIMITS, ...dependencies.perSeedLimits };
   const candidates = new Map<string, ArtistExpansionCandidate>();
-  const diagnostics: ArtistExpansionDiagnostic[] = [];
   const selectedNames = new Set(
     inputArtists.flatMap((artist) => [artist.name, ...(artist.aliases ?? [])]).map(normalizeName)
   );
@@ -64,31 +69,65 @@ export async function expandArtistPreferences(
         left.index - right.index
     );
 
+  const seeds: Array<{
+    artist: WeightedPreference;
+    related: ListenBrainzSimilarArtist[];
+    cursor: number;
+    candidateCount: number;
+  }> = [];
+  const terminalDiagnostics: ArtistExpansionDiagnostic[] = [];
+
   for (const { artist } of orderedSeeds) {
-    if (candidates.size >= maxCandidates) break;
     const seedLimit = Math.max(0, Math.floor(perSeedLimits[artist.weight]));
     if (seedLimit === 0) {
-      diagnostics.push({ seedName: artist.name, status: "expanded", candidateCount: 0 });
+      terminalDiagnostics.push({ seedName: artist.name, status: "expanded", candidateCount: 0 });
       continue;
     }
 
     try {
       const resolved = await dependencies.resolveArtist(artist.name);
       if (!resolved) {
-        diagnostics.push({ seedName: artist.name, status: "unresolved", candidateCount: 0 });
+        terminalDiagnostics.push({ seedName: artist.name, status: "unresolved", candidateCount: 0 });
         continue;
       }
       const similar = await dependencies.similarArtists(resolved.id, seedLimit);
-      let added = 0;
-      for (const related of similar.slice(0, seedLimit)) {
+      seeds.push({
+        artist,
+        related: similar
+          .slice(0, seedLimit)
+          .filter(
+            (related) =>
+              related.id !== resolved.id && !selectedNames.has(normalizeName(related.name))
+          ),
+        cursor: 0,
+        candidateCount: 0
+      });
+    } catch {
+      terminalDiagnostics.push({ seedName: artist.name, status: "failed", candidateCount: 0 });
+    }
+  }
+
+  // Weighted round-robin prevents the first seed from consuming the entire
+  // global budget while still giving stronger preferences more opportunities.
+  const maxCredits = Math.max(...Object.values(ALLOCATION_CREDITS));
+  let madeProgress = true;
+  while (candidates.size < maxCandidates && madeProgress) {
+    madeProgress = false;
+    for (let credit = 0; credit < maxCredits && candidates.size < maxCandidates; credit += 1) {
+      for (const seed of seeds) {
         if (candidates.size >= maxCandidates) break;
-        if (related.id === resolved.id || selectedNames.has(normalizeName(related.name))) continue;
+        if (ALLOCATION_CREDITS[seed.artist.weight] <= credit) continue;
+        const related = seed.related[seed.cursor];
+        if (!related) continue;
+        seed.cursor += 1;
+        madeProgress = true;
+
         const canonicalId = `musicbrainz:${related.id}`;
         const evidence = {
           source: "listenbrainz" as const,
-          seedName: artist.name,
-          seedCanonicalId: artist.canonicalId,
-          seedWeight: artist.weight,
+          seedName: seed.artist.name,
+          seedCanonicalId: seed.artist.canonicalId,
+          seedWeight: seed.artist.weight,
           rank: related.rank
         };
         const existing = candidates.get(canonicalId);
@@ -102,13 +141,23 @@ export async function expandArtistPreferences(
           musicBrainzId: related.id,
           evidence: [evidence]
         });
-        added += 1;
+        seed.candidateCount += 1;
       }
-      diagnostics.push({ seedName: artist.name, status: "expanded", candidateCount: added });
-    } catch {
-      diagnostics.push({ seedName: artist.name, status: "failed", candidateCount: 0 });
     }
   }
+
+  const diagnostics = [
+    ...seeds.map((seed) => ({
+      seedName: seed.artist.name,
+      status: "expanded" as const,
+      candidateCount: seed.candidateCount
+    })),
+    ...terminalDiagnostics
+  ].sort(
+    (left, right) =>
+      inputArtists.findIndex((artist) => artist.name === left.seedName) -
+      inputArtists.findIndex((artist) => artist.name === right.seedName)
+  );
 
   return { candidates: [...candidates.values()], diagnostics };
 }

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { NormalizedEvent, ProviderDiagnostic } from "../../src/core/types.js";
-import { deriveDataMode } from "../../src/server/result.js";
+import type {
+  NormalizedEvent,
+  ProviderDiagnostic,
+  RecommendationFunnel
+} from "../../src/core/types.js";
+import { deriveDataMode, recommendationCoverage } from "../../src/server/result.js";
 
 describe("deriveDataMode", () => {
   it("does not mislabel an all-failed live run as fixture data", () => {
@@ -32,5 +36,36 @@ describe("deriveDataMode", () => {
       ]
     } as NormalizedEvent;
     expect(deriveDataMode([event], [])).toBe("mixed");
+  });
+
+  it("derives legacy coverage counts from the detailed selection funnel", () => {
+    const funnel: RecommendationFunnel = {
+      inputEvents: 210,
+      deduplicatedEvents: 161,
+      insideForecast: 150,
+      withVenueCoordinates: 148,
+      activeNonTribute: 140,
+      insideTravelBoundary: 42,
+      preferenceEligible: 9,
+      selectedEvents: 7,
+      rejected: {
+        duplicate_event: 49,
+        outside_forecast: 11,
+        missing_venue_coordinates: 2,
+        tribute_event: 1,
+        inactive_event: 7,
+        outside_travel_boundary: 98,
+        no_preference_affinity: 33,
+        exploration_cap: 2,
+        result_limit: 0
+      }
+    };
+
+    expect(recommendationCoverage(210, funnel)).toEqual({
+      rawEvents: 210,
+      deduplicatedEvents: 161,
+      eligibleEvents: 7,
+      funnel
+    });
   });
 });

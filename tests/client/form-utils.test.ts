@@ -51,7 +51,7 @@ describe("validateForm", () => {
       id: `language-${index}`,
       language
     }));
-    expect(validateForm(state, "en").languages).toBe("Choose up to 3 performance languages.");
+    expect(validateForm(state, "en").languages).toBe("Choose up to 3 accepted performance languages.");
   });
 
   it("does not require language rows in any-language mode", () => {

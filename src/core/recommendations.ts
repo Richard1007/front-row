@@ -8,6 +8,8 @@ import type {
   LanguageEvidence,
   NormalizedEvent,
   RankedEvent,
+  RecommendationFunnel,
+  RecommendationRejectionReason,
   RecommendationTier,
   ValidationInput,
   WeightedPreference
@@ -33,9 +35,9 @@ const TIER_ORDER: Record<RecommendationTier, number> = {
 };
 
 const RELIABLE_LANGUAGE_CONFIDENCE = 0.5;
-const DISCOVERY_THRESHOLD = 0.25;
-const EXPLORATION_THRESHOLD = 0.15;
-const DEFAULT_RESULT_LIMIT = 8;
+const DEFAULT_RESULT_LIMIT = 10;
+const MAX_RESULT_LIMIT = 10;
+const MAX_EXPLORATION_RESULTS = 3;
 
 export interface RecommendationOptions {
   now?: Date;
@@ -46,6 +48,13 @@ interface DimensionValue {
   match: number;
   confidence: number;
   label?: string;
+  similaritySource?: ArtistSimilarityEvidence["source"];
+  preferenceSource?: "explicit" | "inferred";
+}
+
+export interface RecommendationSelection {
+  recommendations: RankedEvent[];
+  funnel: RecommendationFunnel;
 }
 
 interface ExactArtistMatch {
@@ -152,14 +161,20 @@ function artistDimension(
     for (const affinity of performer.similarTo ?? []) {
       for (const preference of preferences) {
         if (!affinityReferencesPreference(affinity, preference)) continue;
-        const sourceCeiling =
-          affinity.source === "manual" ? 0.85 : affinity.source === "provider" ? 0.7 : 0.45;
+        const sourceCeiling: Record<ArtistSimilarityEvidence["source"], number> = {
+          manual: 0.85,
+          provider: 0.7,
+          listenbrainz: 0.75,
+          genre: 0.45
+        };
         const match =
-          Math.min(clampUnit(affinity.score), sourceCeiling) * IMPORTANCE_VALUES[preference.weight];
+          Math.min(clampUnit(affinity.score), sourceCeiling[affinity.source]) *
+          IMPORTANCE_VALUES[preference.weight];
         const candidate = {
           match,
           confidence: clampUnit(affinity.confidence),
-          label: preference.name
+          label: preference.name,
+          similaritySource: affinity.source
         };
         if (!best || candidate.match * candidate.confidence > best.match * best.confidence) {
           best = candidate;
@@ -172,14 +187,14 @@ function artistDimension(
 
 function genreDimension(
   event: NormalizedEvent,
-  preferences: WeightedPreference[]
+  input: ValidationInput
 ): DimensionValue | undefined {
-  if (preferences.length === 0 || event.genres.length === 0) return undefined;
+  if (event.genres.length === 0) return undefined;
 
   const eventGenres = new Set(event.genres.map(normalizedText));
   let bestMatch = 0;
   let bestLabel: string | undefined;
-  for (const preference of preferences) {
+  for (const preference of input.genres) {
     if (!eventGenres.has(normalizedText(preference.name))) continue;
     const match = IMPORTANCE_VALUES[preference.weight];
     if (match > bestMatch) {
@@ -188,7 +203,36 @@ function genreDimension(
     }
   }
 
-  return { match: bestMatch, confidence: 1, label: bestLabel };
+  // A user's explicit category wins whenever it matches. Artist-derived
+  // genres only broaden discovery when the user did not select that category.
+  if (bestLabel) {
+    return {
+      match: bestMatch,
+      confidence: 1,
+      label: bestLabel,
+      preferenceSource: "explicit"
+    };
+  }
+
+  for (const preference of input.inferredGenres ?? []) {
+    if (!eventGenres.has(normalizedText(preference.name))) continue;
+    const match = clampUnit(preference.percentage / 100);
+    if (match > bestMatch) {
+      bestMatch = match;
+      bestLabel = preference.name;
+    }
+  }
+
+  if (!bestLabel) return undefined;
+  const inferred = input.inferredGenres?.find(
+    (preference) => normalizedText(preference.name) === normalizedText(bestLabel)
+  );
+  return {
+    match: bestMatch,
+    confidence: clampUnit(inferred?.confidence ?? 1),
+    label: bestLabel,
+    preferenceSource: "inferred"
+  };
 }
 
 const LANGUAGE_ROLE_MATCH: Record<LanguageEvidence["role"], number> = {
@@ -197,25 +241,55 @@ const LANGUAGE_ROLE_MATCH: Record<LanguageEvidence["role"], number> = {
   occasional: 0.35
 };
 
+function languagePreferenceProfile(input: ValidationInput): {
+  shares: Map<string, number>;
+  confidence: number;
+} | undefined {
+  if (input.inferredLanguages && input.inferredLanguages.length > 0) {
+    return {
+      shares: new Map(
+        input.inferredLanguages.map((item) => [
+          normalizedText(item.language),
+          clampUnit(item.percentage / 100)
+        ])
+      ),
+      confidence: 1
+    };
+  }
+
+  // Accepted languages express openness, not a requested output quota. They
+  // are therefore an equal, lower-confidence fallback when artist-derived
+  // language evidence is unavailable.
+  if (input.languageMode === "weighted" && input.languages.length > 0) {
+    const equalShare = 1 / input.languages.length;
+    return {
+      shares: new Map(
+        input.languages.map((item) => [normalizedText(item.language), equalShare])
+      ),
+      confidence: 0.5
+    };
+  }
+
+  return undefined;
+}
+
 function languageDimension(
   event: NormalizedEvent,
   input: ValidationInput
 ): DimensionValue | undefined {
-  if (input.languageMode === "any") return undefined;
+  const preferenceProfile = languagePreferenceProfile(input);
+  if (!preferenceProfile) return undefined;
   const reliableEvidence = event.languages.filter(
     (language) => language.source !== "unknown" && language.confidence >= RELIABLE_LANGUAGE_CONFIDENCE
   );
   if (reliableEvidence.length === 0) return undefined;
 
-  const desiredShares = new Map(
-    input.languages.map((language) => [normalizedText(language.language), language.percentage / 100])
-  );
-  let best: DimensionValue = { match: 0, confidence: 1 };
+  let best: DimensionValue = { match: 0, confidence: preferenceProfile.confidence };
   for (const evidence of reliableEvidence) {
-    const desiredShare = desiredShares.get(normalizedText(evidence.language)) ?? 0;
+    const desiredShare = preferenceProfile.shares.get(normalizedText(evidence.language)) ?? 0;
     const candidate = {
       match: desiredShare * LANGUAGE_ROLE_MATCH[evidence.role],
-      confidence: clampUnit(evidence.confidence),
+      confidence: clampUnit(evidence.confidence) * preferenceProfile.confidence,
       label: desiredShare > 0 ? evidence.language : undefined
     };
     if (candidate.match * candidate.confidence > best.match * best.confidence) best = candidate;
@@ -248,8 +322,7 @@ function weightedScore(dimensions: {
 function tierFor(
   event: NormalizedEvent,
   exact: ExactArtistMatch | undefined,
-  artistMatch: number | undefined,
-  score: number,
+  hasSourcedArtistSimilarity: boolean,
   now: Date
 ): RecommendationTier {
   if (exact) {
@@ -257,9 +330,7 @@ function tierFor(
     if (futureOnSale) return "T0";
     return "T1";
   }
-  return artistMatch !== undefined && artistMatch > 0 && score >= DISCOVERY_THRESHOLD
-    ? "T2"
-    : "T3";
+  return hasSourcedArtistSimilarity ? "T2" : "T3";
 }
 
 function reasonFor(
@@ -279,7 +350,11 @@ function reasonFor(
   else if (dimensions.artist?.label) reasons.push(`与 ${dimensions.artist.label} 风格相近`);
 
   if (dimensions.genre?.label && dimensions.genre.match > 0) {
-    reasons.push(`符合你对 ${dimensions.genre.label} 的偏好`);
+    reasons.push(
+      dimensions.genre.preferenceSource === "inferred"
+        ? `根据所选艺人推断你可能喜欢 ${dimensions.genre.label}`
+        : `符合你对 ${dimensions.genre.label} 的偏好`
+    );
   }
   if (dimensions.language?.label && dimensions.language.match > 0) {
     reasons.push(`演唱语言包含 ${displayLanguage(dimensions.language.label)}`);
@@ -293,7 +368,7 @@ function warningsFor(event: NormalizedEvent, input: ValidationInput): string[] {
   const warnings = ["出行时间为直线距离估算，实际路况可能不同"];
   if (event.genres.length === 0) warnings.push("暂无可靠的风格信息，未因此降低排名");
   if (
-    input.languageMode === "weighted" &&
+    languagePreferenceProfile(input) &&
     !event.languages.some(
       (language) =>
         language.source !== "unknown" && language.confidence >= RELIABLE_LANGUAGE_CONFIDENCE
@@ -311,42 +386,90 @@ function eligibleByDate(event: NormalizedEvent, now: Date, forecastMonths: numbe
   return eventTime >= now.getTime() && eventTime <= forecastEnd(now, forecastMonths).getTime();
 }
 
+function emptyRejectedCounts(): Record<RecommendationRejectionReason, number> {
+  return {
+    duplicate_event: 0,
+    outside_forecast: 0,
+    missing_venue_coordinates: 0,
+    tribute_event: 0,
+    inactive_event: 0,
+    outside_travel_boundary: 0,
+    no_preference_affinity: 0,
+    exploration_cap: 0,
+    result_limit: 0
+  };
+}
+
 function rankEvent(
   input: ValidationInput,
   event: NormalizedEvent,
-  now: Date
+  now: Date,
+  funnel: RecommendationFunnel
 ): RankedEvent | undefined {
-  if (!eligibleByDate(event, now, input.forecastMonths ?? 4)) return undefined;
-  if (!event.venue.coordinates) return undefined;
-  if (isTributeEvent(event)) return undefined;
+  if (!eligibleByDate(event, now, input.forecastMonths ?? 4)) {
+    funnel.rejected.outside_forecast += 1;
+    return undefined;
+  }
+  funnel.insideForecast += 1;
+
+  if (!event.venue.coordinates) {
+    funnel.rejected.missing_venue_coordinates += 1;
+    return undefined;
+  }
+  funnel.withVenueCoordinates += 1;
+
+  if (isTributeEvent(event)) {
+    funnel.rejected.tribute_event += 1;
+    return undefined;
+  }
 
   const exact = exactArtistMatch(event, input.artists);
-  if (event.status !== "active") return undefined;
+  if (event.status !== "active") {
+    funnel.rejected.inactive_event += 1;
+    return undefined;
+  }
+  funnel.activeNonTribute += 1;
 
   const travel = estimateDrivingTravel(input.origin, event.venue.coordinates);
-  if (travel.travelMinutes > input.maxTravelMinutes) return undefined;
+  if (travel.travelMinutes > input.maxTravelMinutes) {
+    funnel.rejected.outside_travel_boundary += 1;
+    return undefined;
+  }
+  funnel.insideTravelBoundary += 1;
 
   const dimensions = {
     artist: artistDimension(event, input.artists, exact),
-    genre: genreDimension(event, input.genres),
+    genre: genreDimension(event, input),
     language: languageDimension(event, input)
   };
   const aggregate = weightedScore(dimensions);
-  const tier = tierFor(event, exact, dimensions.artist?.match, aggregate.final, now);
-
-  if (
-    tier === "T3" &&
-    !(dimensions.artist?.match && dimensions.artist.match > 0) &&
-    !(
-      dimensions.genre?.match &&
+  const hasSourcedArtistSimilarity = Boolean(
+    dimensions.artist?.match &&
+      dimensions.artist.match > 0 &&
+      dimensions.artist.similaritySource &&
+      dimensions.artist.similaritySource !== "genre"
+  );
+  const broadInferredGenre = new Set(["pop", "rock", "world"]);
+  const hasGenreAffinity = Boolean(
+    dimensions.genre?.match &&
       dimensions.genre.match > 0 &&
-      dimensions.language?.match &&
-      dimensions.language.match > 0
-    )
-  ) {
+      (dimensions.genre.preferenceSource === "explicit" ||
+        !broadInferredGenre.has(normalizedText(dimensions.genre.label ?? "")))
+  );
+  const hasLanguageAffinity = Boolean(
+    dimensions.language?.match && dimensions.language.match > 0
+  );
+
+  // Explicit artists are always eligible. Discovery needs a positive, sourced
+  // affinity, but genre/language weights remain soft ranking signals rather
+  // than filters that can veto an otherwise relevant event.
+  if (!exact && !hasSourcedArtistSimilarity && !hasGenreAffinity && !hasLanguageAffinity) {
+    funnel.rejected.no_preference_affinity += 1;
     return undefined;
   }
-  if (tier === "T3" && aggregate.final < EXPLORATION_THRESHOLD) return undefined;
+  funnel.preferenceEligible += 1;
+
+  const tier = tierFor(event, exact, hasSourcedArtistSimilarity, now);
 
   return {
     ...event,
@@ -367,23 +490,36 @@ function rankEvent(
 
 /**
  * Provider-neutral recommendation pipeline: deduplicate, filter, score, explain,
- * and return at most eight strong events. Every T0/T1 result precedes discovery.
+ * and return at most ten strong events. Every T0/T1 result precedes discovery.
  */
-export function buildRecommendations(
+export function buildRecommendationSelection(
   input: ValidationInput,
   events: NormalizedEvent[],
   options: RecommendationOptions = {}
-): RankedEvent[] {
+): RecommendationSelection {
   const now = options.now ?? new Date();
   const requestedLimit = Number.isFinite(options.limit)
     ? Math.floor(options.limit!)
     : DEFAULT_RESULT_LIMIT;
-  const limit = Math.min(DEFAULT_RESULT_LIMIT, Math.max(1, requestedLimit));
+  const limit = Math.min(MAX_RESULT_LIMIT, Math.max(1, requestedLimit));
   const enrichedInput = enrichValidationInput(input);
   const enrichedEvents = events.map(enrichEvent);
+  const deduplicatedEvents = deduplicateEvents(enrichedEvents);
+  const funnel: RecommendationFunnel = {
+    inputEvents: events.length,
+    deduplicatedEvents: deduplicatedEvents.length,
+    insideForecast: 0,
+    withVenueCoordinates: 0,
+    activeNonTribute: 0,
+    insideTravelBoundary: 0,
+    preferenceEligible: 0,
+    selectedEvents: 0,
+    rejected: emptyRejectedCounts()
+  };
+  funnel.rejected.duplicate_event = events.length - deduplicatedEvents.length;
 
-  const ranked = deduplicateEvents(enrichedEvents)
-    .map((event) => rankEvent(enrichedInput, event, now))
+  const ranked = deduplicatedEvents
+    .map((event) => rankEvent(enrichedInput, event, now, funnel))
     .filter((event): event is RankedEvent => Boolean(event))
     .sort((left, right) => {
       const tierDifference = TIER_ORDER[left.tier] - TIER_ORDER[right.tier];
@@ -396,14 +532,29 @@ export function buildRecommendations(
     });
 
   const results: RankedEvent[] = [];
-  let explorationIncluded = false;
+  let explorationCount = 0;
   for (const event of ranked) {
+    if (results.length >= limit) {
+      funnel.rejected.result_limit += 1;
+      continue;
+    }
     if (event.tier === "T3") {
-      if (explorationIncluded) continue;
-      explorationIncluded = true;
+      if (explorationCount >= MAX_EXPLORATION_RESULTS) {
+        funnel.rejected.exploration_cap += 1;
+        continue;
+      }
+      explorationCount += 1;
     }
     results.push(event);
-    if (results.length >= limit) break;
   }
-  return results;
+  funnel.selectedEvents = results.length;
+  return { recommendations: results, funnel };
+}
+
+export function buildRecommendations(
+  input: ValidationInput,
+  events: NormalizedEvent[],
+  options: RecommendationOptions = {}
+): RankedEvent[] {
+  return buildRecommendationSelection(input, events, options).recommendations;
 }

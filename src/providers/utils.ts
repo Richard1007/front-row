@@ -78,6 +78,43 @@ export function mapEventStatus(value: unknown): EventStatus {
   return "unknown";
 }
 
+/**
+ * Some provider feeds leave an obsolete listing marked active while adding an
+ * editorial status to its title. Only explicit status wording is recognized;
+ * labels such as "Rescheduled Date" may describe the valid replacement show
+ * and deliberately remain active.
+ */
+export function inactiveStatusFromEventTitle(
+  title: string,
+): { status: "cancelled" | "postponed"; note: string } | undefined {
+  const normalized = title.normalize("NFKC").replace(/\s+/g, " ").trim();
+
+  if (/\b(?:event\s+)?cancelled\b|\b(?:event\s+)?canceled\b/i.test(normalized)) {
+    return {
+      status: "cancelled",
+      note: "Provider title indicates a cancelled listing",
+    };
+  }
+
+  const explicitlyPostponed =
+    /\b(?:event\s+)?postponed\s+(?:to|until)\b/i.test(normalized) ||
+    /(?:^|[\[({\-–—])\s*(?:event\s+)?postponed\s*(?:$|[:\])}\-–—])/i.test(
+      normalized,
+    );
+  const obsoleteReschedule =
+    /\b(?:event\s+)?rescheduled\s+(?:to|from)\b/i.test(normalized) ||
+    /\b(?:event\s+)?moved\s+to\b/i.test(normalized);
+
+  if (explicitlyPostponed || obsoleteReschedule) {
+    return {
+      status: "postponed",
+      note: "Provider title indicates an obsolete postponed or rescheduled listing",
+    };
+  }
+
+  return undefined;
+}
+
 export function uniqueStrings(values: Array<string | undefined>): string[] {
   const seen = new Set<string>();
   const result: string[] = [];

@@ -9,6 +9,9 @@ export interface ResolvedMusicBrainzArtist {
   id: string;
   name: string;
   score: number;
+  /** Community metadata; consumers must still apply a conservative allowlist. */
+  tags?: string[];
+  genres?: string[];
 }
 
 export interface MusicBrainzArtistDetails {
@@ -32,6 +35,8 @@ interface MusicBrainzArtistResult {
   id?: unknown;
   name?: unknown;
   score?: unknown;
+  tags?: unknown;
+  genres?: unknown;
 }
 
 export class MusicBrainzClient {
@@ -176,7 +181,25 @@ function parseArtist(value: unknown): ResolvedMusicBrainzArtist | undefined {
   }
   const score = typeof artist.score === "number" ? artist.score : Number(artist.score);
   if (!Number.isFinite(score)) return undefined;
-  return { id: artist.id, name: artist.name, score };
+  const tags = metadataNames(artist.tags);
+  const genres = metadataNames(artist.genres);
+  return {
+    id: artist.id,
+    name: artist.name,
+    score,
+    ...(tags.length > 0 ? { tags } : {}),
+    ...(genres.length > 0 ? { genres } : {})
+  };
+}
+
+function metadataNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(
+    value
+      .map((item) => asRecord(item)?.name)
+      .filter((name): name is string => typeof name === "string" && name.trim().length > 0)
+      .map((name) => name.trim())
+  )];
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

@@ -29,13 +29,50 @@ describe("artist preference expansion", () => {
       maxCandidates: 10
     });
 
-    expect(resolveArtist.mock.calls.map(([name]) => name)).toEqual(["Priority", "Like"]);
-    expect(similarArtists.mock.calls.map(([, limit]) => limit)).toEqual([8, 5]);
+    expect(resolveArtist.mock.calls.map(([name]) => name)).toEqual([
+      "Priority",
+      "Like",
+      "Occasional"
+    ]);
+    expect(similarArtists.mock.calls.map(([, limit]) => limit)).toEqual([8, 5, 3]);
     expect(result.candidates).toHaveLength(10);
     expect(result.candidates[0]).toMatchObject({
       canonicalId: "musicbrainz:seed-priority-related-0",
       evidence: [{ source: "listenbrainz", seedName: "Priority", seedWeight: "priority", rank: 1 }]
     });
+    expect(
+      new Set(result.candidates.flatMap((candidate) => candidate.evidence.map((item) => item.seedName)))
+    ).toEqual(new Set(["Priority", "Like", "Occasional"]));
+  });
+
+  it("fairly alternates equally weighted seeds under a small global budget", async () => {
+    const result = await expandArtistPreferences(
+      [
+        { name: "Seed A", weight: "priority" },
+        { name: "Seed B", weight: "priority" }
+      ],
+      {
+        resolveArtist: async (name) => ({ id: name, name, score: 100 }),
+        similarArtists: async (seedId, limit) =>
+          Array.from({ length: limit }, (_, index) => ({
+            id: `${seedId}-${index}`,
+            name: `${seedId} Artist ${index}`,
+            rank: index + 1
+          })),
+        maxCandidates: 4
+      }
+    );
+
+    expect(result.candidates.map((candidate) => candidate.evidence[0]?.seedName)).toEqual([
+      "Seed A",
+      "Seed B",
+      "Seed A",
+      "Seed B"
+    ]);
+    expect(result.diagnostics).toEqual([
+      { seedName: "Seed A", status: "expanded", candidateCount: 2 },
+      { seedName: "Seed B", status: "expanded", candidateCount: 2 }
+    ]);
   });
 
   it("deduplicates candidates while retaining evidence from each seed", async () => {

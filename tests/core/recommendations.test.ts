@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildRecommendationSelection,
   buildRecommendations,
   type NormalizedEvent,
   type ValidationInput
@@ -178,6 +179,50 @@ describe("buildRecommendations", () => {
     expect(result?.warnings.join(" ")).toContain("未因此降低排名");
   });
 
+  it("uses specific artist-inferred genres as soft discovery signals without overriding explicit genres", () => {
+    const rnbShow = event("inferred-rnb", { genres: ["R&B"] });
+    const inferred = buildRecommendations(
+      input({
+        genres: [],
+        inferredGenres: [{ name: "R&B", percentage: 70, confidence: 0.85 }],
+        languageMode: "any",
+        languages: []
+      }),
+      [rnbShow],
+      { now: NOW }
+    )[0];
+
+    expect(inferred).toMatchObject({ tier: "T3" });
+    expect(inferred?.score.genre).toBeCloseTo(0.7);
+
+    const explicit = buildRecommendations(
+      input({
+        genres: [{ name: "R&B", weight: "occasional" }],
+        inferredGenres: [{ name: "R&B", percentage: 70, confidence: 0.85 }],
+        languageMode: "any",
+        languages: []
+      }),
+      [rnbShow],
+      { now: NOW }
+    )[0];
+
+    expect(explicit?.score.genre).toBe(0.25);
+  });
+
+  it("does not admit an event from a broad inferred genre alone", () => {
+    const genericRock = event("generic-rock", { genres: ["Rock"] });
+    expect(buildRecommendations(
+      input({
+        genres: [],
+        inferredGenres: [{ name: "Rock", percentage: 80, confidence: 0.9 }],
+        languageMode: "any",
+        languages: []
+      }),
+      [genericRock],
+      { now: NOW }
+    )).toEqual([]);
+  });
+
   it("uses fixed artist importance values rather than sum normalization", () => {
     const liked = event("liked", {
       performers: [{ name: "Liked Artist", canonicalId: "artist:liked" }]
@@ -287,7 +332,7 @@ describe("buildRecommendations", () => {
     ]);
   });
 
-  it("limits normal results to eight and includes at most one exploration event", () => {
+  it("limits normal results to ten and includes at most three exploration events", () => {
     const strong = Array.from({ length: 10 }, (_, index) =>
       event(`strong-${index}`, {
         performers: [{
@@ -313,11 +358,72 @@ describe("buildRecommendations", () => {
     );
 
     const result = buildRecommendations(input(), [...strong, ...exploratory], { now: NOW });
-    expect(result).toHaveLength(8);
+    expect(result).toHaveLength(10);
     expect(result.filter((item) => item.tier === "T3")).toHaveLength(0);
 
     const onlyExploration = buildRecommendations(input(), exploratory, { now: NOW });
-    expect(onlyExploration.filter((item) => item.tier === "T3")).toHaveLength(1);
+    expect(onlyExploration.filter((item) => item.tier === "T3")).toHaveLength(2);
+  });
+
+  it("accepts T3 with reliable genre or language affinity alone", () => {
+    const genreOnly = event("genre-only", { genres: ["Mandopop"] });
+    const languageOnly = event("language-only", {
+      languages: [{ language: "cmn", role: "primary", confidence: 0.9, source: "manual" }]
+    });
+
+    const result = buildRecommendations(input(), [genreOnly, languageOnly], { now: NOW });
+    expect(result.map((item) => item.canonicalKey).sort()).toEqual([
+      "genre-only",
+      "language-only"
+    ]);
+    expect(result.every((item) => item.tier === "T3")).toBe(true);
+  });
+
+  it("uses inferred artist languages as a soft signal even in any-language mode", () => {
+    const inferred = input({
+      languageMode: "any",
+      languages: [],
+      inferredLanguages: [{ language: "cmn", percentage: 100 }],
+      genres: []
+    });
+    const languageOnly = event("inferred-language", {
+      languages: [{ language: "cmn", role: "primary", confidence: 0.9, source: "manual" }]
+    });
+
+    const [result] = buildRecommendations(inferred, [languageOnly], { now: NOW });
+    expect(result?.tier).toBe("T3");
+    expect(result?.score.language).toBe(1);
+  });
+
+  it("reports every recommendation funnel stage and first rejection reason", () => {
+    const duplicate = event("exact", {
+      performers: [{ name: "Wang Leehom", canonicalId: "artist:leehom" }]
+    });
+    const outsideForecast = event("old", { startAt: "2026-01-01T00:00:00.000Z" });
+    const noAffinity = event("no-affinity", { genres: ["Death metal"] });
+
+    const selection = buildRecommendationSelection(
+      input(),
+      [duplicate, { ...duplicate }, outsideForecast, noAffinity],
+      { now: NOW }
+    );
+
+    expect(selection.recommendations).toHaveLength(1);
+    expect(selection.funnel).toMatchObject({
+      inputEvents: 4,
+      deduplicatedEvents: 3,
+      insideForecast: 2,
+      withVenueCoordinates: 2,
+      activeNonTribute: 2,
+      insideTravelBoundary: 2,
+      preferenceEligible: 1,
+      selectedEvents: 1,
+      rejected: {
+        duplicate_event: 1,
+        outside_forecast: 1,
+        no_preference_affinity: 1
+      }
+    });
   });
 
   it("never pads the list with zero-match local events", () => {
@@ -356,7 +462,7 @@ describe("buildRecommendations", () => {
     const [result] = buildRecommendations(input(), [exact], { now: NOW });
 
     expect(result?.reason).toContain("王力宏");
-    expect(result?.score).toMatchObject({ artist: 1, genre: 1, language: 0.9 });
+    expect(result?.score).toMatchObject({ artist: 1, genre: 1, language: 0.5 });
     expect(result?.estimatedTravelMinutes).toBeGreaterThan(0);
     expect(result?.distanceMiles).toBeGreaterThan(0);
     expect(result?.warnings[0]).toContain("估算");

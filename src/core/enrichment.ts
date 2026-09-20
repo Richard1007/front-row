@@ -47,6 +47,10 @@ export function enrichValidationInput(input: ValidationInput): ValidationInput {
     languages: input.languages.map((language) => ({
       ...language,
       language: normalizeLanguageTag(language.language)
+    })),
+    inferredLanguages: input.inferredLanguages?.map((language) => ({
+      ...language,
+      language: normalizeLanguageTag(language.language)
     }))
   };
 }

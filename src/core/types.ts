@@ -23,12 +23,22 @@ export interface LanguagePreference {
   percentage: number;
 }
 
+export interface InferredGenrePreference {
+  name: string;
+  percentage: number;
+  confidence: number;
+}
+
 export interface ValidationInput {
   artists: WeightedPreference[];
   /** Server-side sourced related artists used only for candidate retrieval. */
   discoveryArtists?: ArtistExpansionCandidate[];
   genres: WeightedPreference[];
+  /** Artist-derived genre profile used only as a soft ranking signal. */
+  inferredGenres?: InferredGenrePreference[];
   languages: LanguagePreference[];
+  /** Artist-derived language profile used only as a soft ranking signal. */
+  inferredLanguages?: LanguagePreference[];
   languageMode: "weighted" | "any";
   origin: Coordinates & { label: string };
   maxTravelMinutes: number;
@@ -120,6 +130,33 @@ export interface RankedEvent extends NormalizedEvent {
   warnings: string[];
 }
 
+export type RecommendationRejectionReason =
+  | "duplicate_event"
+  | "outside_forecast"
+  | "missing_venue_coordinates"
+  | "tribute_event"
+  | "inactive_event"
+  | "outside_travel_boundary"
+  | "no_preference_affinity"
+  | "exploration_cap"
+  | "result_limit";
+
+/**
+ * Counts each provider-backed event through the recommendation funnel. Every
+ * rejected event is assigned exactly one reason at the first stage it fails.
+ */
+export interface RecommendationFunnel {
+  inputEvents: number;
+  deduplicatedEvents: number;
+  insideForecast: number;
+  withVenueCoordinates: number;
+  activeNonTribute: number;
+  insideTravelBoundary: number;
+  preferenceEligible: number;
+  selectedEvents: number;
+  rejected: Record<RecommendationRejectionReason, number>;
+}
+
 export interface ProviderCapability {
   id: ProviderId;
   label: string;
@@ -145,10 +182,14 @@ export interface ValidationResult {
     source: "musicbrainz-listenbrainz";
     candidateArtists: string[];
     unresolvedSeeds: string[];
+    inferredLanguages?: LanguagePreference[];
+    unknownLanguagePercentage?: number;
+    inferredGenres?: InferredGenrePreference[];
   };
   coverage: {
     rawEvents: number;
     deduplicatedEvents: number;
     eligibleEvents: number;
+    funnel: RecommendationFunnel;
   };
 }

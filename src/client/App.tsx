@@ -3,6 +3,7 @@ import type {
   ImportanceLevel,
   ProviderCapability,
   RankedEvent,
+  RecommendationRejectionReason,
   ValidationResult
 } from "../core/types";
 import {
@@ -102,6 +103,27 @@ const tierLabelKeys = {
   T2: "tierT2",
   T3: "tierT3"
 } as const;
+
+const tierDescriptionKeys = {
+  T0: "tierT0Description",
+  T1: "tierT1Description",
+  T2: "tierT2Description",
+  T3: "tierT3Description"
+} as const;
+
+const tierOrder = ["T0", "T1", "T2", "T3"] as const;
+
+const rejectionLabelKeys = {
+  duplicate_event: "rejectedDuplicate",
+  outside_forecast: "rejectedOutsideForecast",
+  missing_venue_coordinates: "rejectedMissingVenue",
+  tribute_event: "rejectedTribute",
+  inactive_event: "rejectedInactive",
+  outside_travel_boundary: "rejectedOutsideTravel",
+  no_preference_affinity: "rejectedNoPreference",
+  exploration_cap: "rejectedExplorationCap",
+  result_limit: "rejectedResultLimit"
+} as const satisfies Record<RecommendationRejectionReason, string>;
 
 function providerName(locale: Locale, id: string, fallback?: string): string {
   if (id === "ticketmaster") return "Ticketmaster";
@@ -402,6 +424,59 @@ function DataModeBanner({ locale, mode }: { locale: Locale; mode: DisplayDataMod
         <p>{tr(locale, descriptionKeys[mode])}</p>
       </div>
     </div>
+  );
+}
+
+function TierGuide({ locale }: { locale: Locale }) {
+  return (
+    <details className="tier-guide">
+      <summary>{tr(locale, "tierGuide")}</summary>
+      <p>{tr(locale, "tierGuideIntro")}</p>
+      <div className="tier-guide-grid">
+        {tierOrder.map((tier) => (
+          <div key={tier}>
+            <strong className={`tier-badge tier-${tier.toLowerCase()}`}>
+              {tier} · {tr(locale, tierLabelKeys[tier])}
+            </strong>
+            <span>{tr(locale, tierDescriptionKeys[tier])}</span>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function ResultFunnel({ locale, result }: { locale: Locale; result: ValidationResult }) {
+  const funnel = result.coverage.funnel;
+  const rejected = (Object.entries(funnel.rejected) as [RecommendationRejectionReason, number][])
+    .filter(([, count]) => count > 0);
+
+  return (
+    <section className="result-funnel" aria-labelledby="result-flow-heading">
+      <h3 id="result-flow-heading">{tr(locale, "resultFlow")}</h3>
+      <div className="coverage-strip">
+        <span><strong>{funnel.inputEvents}</strong>{tr(locale, "rawListings")}</span>
+        <span><strong>{funnel.deduplicatedEvents}</strong>{tr(locale, "uniqueEvents")}</span>
+        <span><strong>{funnel.preferenceEligible}</strong>{tr(locale, "preferenceEligible")}</span>
+        <span><strong>{funnel.selectedEvents}</strong>{tr(locale, "shownResults")}</span>
+      </div>
+      {rejected.length > 0 && (
+        <div className="rejection-breakdown">
+          <strong>{tr(locale, "rejectionsTitle")}</strong>
+          <span>{tr(locale, "funnelExplanation")}</span>
+          <ul>
+            {rejected.map(([reason, count]) => (
+              <li key={reason}>
+                {tr(locale, "rejectionCount", {
+                  label: tr(locale, rejectionLabelKeys[reason]),
+                  count
+                })}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1013,6 +1088,8 @@ export default function App() {
             )}
           </div>
 
+          <TierGuide locale={locale} />
+
           {!result && !submitting && (
             <div className="empty-state">
               <span aria-hidden="true">↗</span>
@@ -1032,6 +1109,7 @@ export default function App() {
           {result && !submitting && (
             <>
               <DataModeBanner locale={locale} mode={displayedDataMode(result)} />
+              <ResultFunnel locale={locale} result={result} />
 
               {result.recommendations.length === 0 ? (
                 <div className="empty-state result-empty">
@@ -1056,22 +1134,46 @@ export default function App() {
               <details className="diagnostics">
                 <summary>{tr(locale, "diagnostics")}</summary>
                 <div>
-                  <p>
-                    <strong>{tr(locale, "coverageLabel")}</strong>
-                    <span>
-                      {result.coverage.rawEvents} {tr(locale, "rawEvents")}
-                      {" · "}{result.coverage.deduplicatedEvents} {tr(locale, "deduplicated")}
-                      {" · "}{result.coverage.eligibleEvents} {tr(locale, "selectedRecommendations")}
-                    </span>
-                  </p>
                   {result.discovery && (
-                    <p>
-                      <strong>{tr(locale, "relatedArtistSearch")}</strong>
-                      <span>{tr(locale, "relatedArtistCount", { count: result.discovery.candidateArtists.length })}</span>
-                      {result.discovery.candidateArtists.length > 0 && (
-                        <small>{result.discovery.candidateArtists.join(" · ")}</small>
+                    <>
+                      <p>
+                        <strong>{tr(locale, "relatedArtistSearch")}</strong>
+                        <span>{tr(locale, "relatedArtistCount", { count: result.discovery.candidateArtists.length })}</span>
+                        {result.discovery.candidateArtists.length > 0 && (
+                          <small>{result.discovery.candidateArtists.join(" · ")}</small>
+                        )}
+                      </p>
+                      {(result.discovery.inferredLanguages?.length || result.discovery.inferredGenres?.length) && (
+                        <p>
+                          <strong>{tr(locale, "inferredProfile")}</strong>
+                          {result.discovery.inferredLanguages && result.discovery.inferredLanguages.length > 0 && (
+                            <span>
+                              {tr(locale, "inferredLanguageMix", {
+                                mix: result.discovery.inferredLanguages
+                                  .map((item) => `${languageLabel(item.language, locale)} ${Math.round(item.percentage)}%`)
+                                  .join(" · ")
+                              })}
+                            </span>
+                          )}
+                          {result.discovery.inferredGenres && result.discovery.inferredGenres.length > 0 && (
+                            <span>
+                              {tr(locale, "inferredGenreMix", {
+                                mix: result.discovery.inferredGenres
+                                  .map((item) => `${genreLabel(item.name, locale)} ${Math.round(item.percentage)}%`)
+                                  .join(" · ")
+                              })}
+                            </span>
+                          )}
+                          {Boolean(result.discovery.unknownLanguagePercentage) && (
+                            <small>
+                              {tr(locale, "unknownLanguageShare", {
+                                percentage: Math.round(result.discovery.unknownLanguagePercentage ?? 0)
+                              })}
+                            </small>
+                          )}
+                        </p>
                       )}
-                    </p>
+                    </>
                   )}
                   {result.diagnostics.map((diagnostic) => (
                     <p key={diagnostic.provider}>

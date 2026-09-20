@@ -39,6 +39,28 @@ describe("MusicBrainz artist resolution", () => {
     ).toBeUndefined();
   });
 
+  it("retains MusicBrainz tags and genres for conservative language inference", () => {
+    expect(
+      parseExactArtist({
+        artists: [
+          {
+            id: "wang",
+            name: "王力宏",
+            score: 100,
+            tags: [{ name: "mandopop" }, { name: "chinese" }],
+            genres: [{ name: "Mandarin Pop" }]
+          }
+        ]
+      })
+    ).toEqual({
+      id: "wang",
+      name: "王力宏",
+      score: 100,
+      tags: ["mandopop", "chinese"],
+      genres: ["Mandarin Pop"]
+    });
+  });
+
   it("uses a meaningful User-Agent and caches exact searches", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       jsonResponse({ artists: [{ id: "wang", name: "王力宏", score: "100" }] })

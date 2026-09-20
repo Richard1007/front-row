@@ -1,6 +1,7 @@
 import type {
   NormalizedEvent,
   ProviderDiagnostic,
+  RecommendationFunnel,
   ValidationResult
 } from "../core/types.js";
 
@@ -21,4 +22,16 @@ export function deriveDataMode(
   if (successfulModes.has("live")) return "live";
   if (successfulModes.has("fixture")) return "fixture";
   return "unavailable";
+}
+
+export function recommendationCoverage(
+  rawEventCount: number,
+  funnel: RecommendationFunnel
+): ValidationResult["coverage"] {
+  return {
+    rawEvents: rawEventCount,
+    deduplicatedEvents: funnel.deduplicatedEvents,
+    eligibleEvents: funnel.selectedEvents,
+    funnel
+  };
 }

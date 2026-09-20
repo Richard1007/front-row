@@ -94,7 +94,7 @@ describe("Milestone 0 curated enrichment", () => {
     expect(result?.tier).toBe("T1");
     expect(result?.reason).toContain("王力宏");
     expect(result?.reason).toContain("普通话");
-    expect(result?.score.language).toBeCloseTo(0.7);
+    expect(result?.score.language).toBeCloseTo(0.5);
     expect(result?.languages).toEqual(
       expect.arrayContaining([expect.objectContaining({ language: "cmn", source: "manual" })])
     );
