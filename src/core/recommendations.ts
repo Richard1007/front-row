@@ -58,6 +58,13 @@ export interface RecommendationSelection {
   funnel: RecommendationFunnel;
 }
 
+export interface RecommendationCandidatePool {
+  /** Every deduplicated, date/travel/status/preference-eligible event before list limits. */
+  candidates: RankedEvent[];
+  funnel: RecommendationFunnel;
+  resultLimit: number;
+}
+
 interface ExactArtistMatch {
   preference: WeightedPreference;
   performerName: string;
@@ -586,14 +593,15 @@ function diversifyPerformers(events: RankedEvent[]): RankedEvent[] {
 }
 
 /**
- * Provider-neutral recommendation pipeline: deduplicate, filter, score, explain,
- * and normally return fewer than ten strong events. Every T0/T1 result precedes discovery.
+ * Builds the complete verified candidate pool before digest limits and discovery
+ * caps are applied. This is the safe boundary for an optional reranker: every
+ * candidate has already passed provider-neutral eligibility checks.
  */
-export function buildRecommendationSelection(
+export function buildRecommendationCandidatePool(
   input: ValidationInput,
   events: NormalizedEvent[],
   options: RecommendationOptions = {}
-): RecommendationSelection {
+): RecommendationCandidatePool {
   const now = options.now ?? new Date();
   const hasExplicitLimit = Number.isFinite(options.limit);
   const requestedLimit = hasExplicitLimit
@@ -637,6 +645,25 @@ export function buildRecommendationSelection(
     exactArtistKeys.size >= ABSOLUTE_RESULT_LIMIT
       ? ABSOLUTE_RESULT_LIMIT
       : normalLimit;
+
+  return { candidates: ranked, funnel, resultLimit: limit };
+}
+
+/**
+ * Provider-neutral recommendation pipeline: deduplicate, filter, score, explain,
+ * and normally return fewer than ten strong events. Every T0/T1 result precedes discovery.
+ */
+export function buildRecommendationSelection(
+  input: ValidationInput,
+  events: NormalizedEvent[],
+  options: RecommendationOptions = {}
+): RecommendationSelection {
+  const pool = buildRecommendationCandidatePool(input, events, options);
+  const ranked = pool.candidates;
+  const funnel = pool.funnel;
+  const limit = pool.resultLimit;
+  const enrichedInput = enrichValidationInput(input);
+  const exact = ranked.filter((event) => event.tier === "T0" || event.tier === "T1");
   const selectedExact = selectExactEvents(exact, enrichedInput.artists, limit);
   funnel.rejected.result_limit += exact.length - selectedExact.length;
 

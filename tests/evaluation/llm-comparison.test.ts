@@ -55,10 +55,12 @@ describe("offline-first LLM comparison harness", () => {
     ]);
     expect(prepared.lockedExactEvents.every((event) => event.tier === "T0" || event.tier === "T1"))
       .toBe(true);
-    expect(prepared.candidatePayload.candidateEvents).toHaveLength(6);
+    expect(prepared.candidatePayload.candidateEvents).toHaveLength(7);
     expect(prepared.candidatePayload.candidateEvents.every(
       (event) => event.tier === "T2" || event.tier === "T3"
     )).toBe(true);
+    expect(prepared.candidatePayload.candidateEvents.map((event) => event.id))
+      .toContain("discovery-rnb");
     expect(prepared.candidatePayload.candidateEvents.every(
       (event) => event.evidence.length > 0
     )).toBe(true);
@@ -72,6 +74,8 @@ describe("offline-first LLM comparison harness", () => {
     )).toBe(true);
     expect(prepared.candidatePayload.policy).toMatchObject({
       maximumSelections: 6,
+      totalEligibleDiscoveryCandidates: 7,
+      candidatePoolTruncated: false,
       factsAreImmutable: true
     });
   });
@@ -83,6 +87,12 @@ describe("offline-first LLM comparison harness", () => {
     const candidateIds = prepared.candidatePayload.candidateEvents.map((event) => event.id);
 
     expect(request.store).toBe(false);
+    expect(request.reasoning.effort).toBe("low");
+    expect(buildResponsesRequest(
+      "gpt-5.6-terra",
+      prepared.candidatePayload,
+      "medium"
+    ).reasoning.effort).toBe("medium");
     expect(request.text.format).toMatchObject({
       type: "json_schema",
       strict: true,
@@ -123,6 +133,22 @@ describe("offline-first LLM comparison harness", () => {
       fetchImpl: fetchMock
     })).rejects.toThrow("no API requests were sent");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("can compare only an explicit subset of models", async () => {
+    const fixture = await loadBenchmarkFixture(fixtureUrl);
+    const report = await runLlmComparison(fixture, {
+      live: false,
+      reasoningEffort: "medium",
+      models: ["gpt-5.6-terra", "gpt-6-astra"]
+    });
+
+    expect(report.models).toEqual(["gpt-5.6-terra", "gpt-6-astra"]);
+    expect(report.reasoningEffort).toBe("medium");
+    expect(report.results.map((result) => result.model)).toEqual([
+      "gpt-5.6-terra",
+      "gpt-6-astra"
+    ]);
   });
 
   it("does not spend money when exact favorites fill every available slot", async () => {

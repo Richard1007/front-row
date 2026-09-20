@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildRecommendationCandidatePool,
   buildRecommendationSelection,
   buildRecommendations,
   type NormalizedEvent,
@@ -60,6 +61,38 @@ function event(key: string, overrides: Partial<NormalizedEvent> = {}): Normalize
 }
 
 describe("buildRecommendations", () => {
+  it("exposes every eligible candidate before digest limits are applied", () => {
+    const exact = event("candidate-pool-exact", {
+      performers: [{ name: "Wang Leehom", canonicalId: "artist:leehom" }]
+    });
+    const discovery = Array.from({ length: 12 }, (_, index) =>
+      event(`candidate-pool-related-${index}`, {
+        performers: [{
+          name: `Related ${index}`,
+          similarTo: [{
+            preferenceCanonicalId: "artist:leehom",
+            score: 0.8,
+            confidence: 0.9,
+            source: "listenbrainz"
+          }]
+        }]
+      })
+    );
+
+    const pool = buildRecommendationCandidatePool(input(), [exact, ...discovery], {
+      now: NOW
+    });
+    const final = buildRecommendationSelection(input(), [exact, ...discovery], {
+      now: NOW
+    });
+
+    expect(pool.candidates).toHaveLength(13);
+    expect(pool.resultLimit).toBe(9);
+    expect(pool.funnel.rejected.result_limit).toBe(0);
+    expect(final.recommendations).toHaveLength(9);
+    expect(final.funnel.rejected.result_limit).toBe(4);
+  });
+
   it("always ranks an exact selected artist above a stronger discovery event", () => {
     const exact = event("exact", {
       performers: [{ name: "Leehom Wang", canonicalId: "artist:leehom" }]

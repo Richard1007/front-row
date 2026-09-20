@@ -1,4 +1,5 @@
 import {
+  buildRecommendationCandidatePool,
   buildRecommendationSelection,
   type RankedEvent,
   type RecommendationTier,
@@ -16,6 +17,7 @@ export const LLM_EVALUATION_MODELS = [
 ] as const;
 
 export type LlmEvaluationModel = (typeof LLM_EVALUATION_MODELS)[number];
+export type LlmReasoningEffort = "low" | "medium";
 
 export const LLM_SELECTION_REASON_CODES = [
   "sourced_artist_similarity",
@@ -67,6 +69,9 @@ export interface LlmCandidatePayload {
   policy: {
     maximumSelections: number;
     lockedExactEventIds: string[];
+    candidatePoolLimit: number;
+    totalEligibleDiscoveryCandidates: number;
+    candidatePoolTruncated: boolean;
     factsAreImmutable: true;
   };
   preferenceProfile: {
@@ -139,6 +144,7 @@ export interface LlmModelEvaluationResult {
 export interface LlmComparisonReport {
   schemaVersion: 2;
   mode: "dry-run" | "live";
+  reasoningEffort: LlmReasoningEffort;
   evaluationId: string;
   models: readonly LlmEvaluationModel[];
   pricing: {
@@ -155,6 +161,7 @@ export interface LlmComparisonReport {
     candidateFactsImmutable: true;
     evidenceBoundSelections: true;
     unsupportedClaimsRejected: true;
+    preLimitCandidatePool: true;
   };
   lockedExactEventIds: string[];
   candidatePayload: LlmCandidatePayload;
@@ -166,12 +173,14 @@ export interface RunLlmComparisonOptions {
   apiKey?: string;
   fetchImpl?: typeof fetch;
   nowMs?: () => number;
+  reasoningEffort?: LlmReasoningEffort;
+  models?: readonly LlmEvaluationModel[];
 }
 
 export interface ResponsesRequestBody {
   model: LlmEvaluationModel;
   store: false;
-  reasoning: { effort: "low" };
+  reasoning: { effort: LlmReasoningEffort };
   instructions: string;
   input: string;
   text: {
@@ -213,6 +222,7 @@ export interface ResponsesRequestBody {
 const RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 const RATE_CARD_AS_OF = "2026-09-20";
 const LONG_CONTEXT_THRESHOLD = 272_000;
+const MAX_LLM_DISCOVERY_CANDIDATES = 30;
 
 // Official Standard rates published per 1M text tokens. Keep the date in every
 // report because prices are operational inputs, not timeless model metadata.
@@ -417,9 +427,13 @@ function verifiedCandidate(
   };
 }
 
-/** Locks exact favorites in code and exposes only core-verified T2/T3 events. */
+/** Locks exact favorites in code and exposes the pre-limit core-verified discovery pool. */
 export function prepareLlmEvaluation(fixture: BenchmarkFixture): PreparedLlmEvaluation {
   const selection = buildRecommendationSelection(fixture.input, fixture.events, {
+    now: new Date(fixture.now),
+    limit: fixture.precisionK
+  });
+  const pool = buildRecommendationCandidatePool(fixture.input, fixture.events, {
     now: new Date(fixture.now),
     limit: fixture.precisionK
   });
@@ -427,8 +441,10 @@ export function prepareLlmEvaluation(fixture: BenchmarkFixture): PreparedLlmEval
     (event) => event.tier === "T0" || event.tier === "T1"
   );
   const maximumSelections = Math.max(0, fixture.precisionK - lockedExactEvents.length);
-  const candidates = selection.recommendations
-    .filter((event) => isDiscoveryTier(event.tier))
+  const eligibleDiscoveryEvents = pool.candidates
+    .filter((event) => isDiscoveryTier(event.tier));
+  const candidates = eligibleDiscoveryEvents
+    .slice(0, MAX_LLM_DISCOVERY_CANDIDATES)
     .map((event) => verifiedCandidate(event, fixture.input));
   const candidateIds = candidates.map((event) => event.id);
   if (new Set(candidateIds).size !== candidateIds.length) {
@@ -442,6 +458,10 @@ export function prepareLlmEvaluation(fixture: BenchmarkFixture): PreparedLlmEval
       policy: {
         maximumSelections,
         lockedExactEventIds: lockedExactEvents.map((event) => event.canonicalKey),
+        candidatePoolLimit: MAX_LLM_DISCOVERY_CANDIDATES,
+        totalEligibleDiscoveryCandidates: eligibleDiscoveryEvents.length,
+        candidatePoolTruncated:
+          eligibleDiscoveryEvents.length > MAX_LLM_DISCOVERY_CANDIDATES,
         factsAreImmutable: true
       },
       preferenceProfile: {
@@ -463,7 +483,8 @@ export function prepareLlmEvaluation(fixture: BenchmarkFixture): PreparedLlmEval
 
 export function buildResponsesRequest(
   model: LlmEvaluationModel,
-  payload: LlmCandidatePayload
+  payload: LlmCandidatePayload,
+  reasoningEffort: LlmReasoningEffort = "low"
 ): ResponsesRequestBody {
   const candidateIds = payload.candidateEvents.map((event) => event.id);
   if (new Set(candidateIds).size !== candidateIds.length) {
@@ -478,7 +499,7 @@ export function buildResponsesRequest(
   return {
     model,
     store: false,
-    reasoning: { effort: "low" },
+    reasoning: { effort: reasoningEffort },
     instructions: RERANK_INSTRUCTIONS,
     input: JSON.stringify(payload),
     text: {
@@ -738,9 +759,10 @@ async function runModelEvaluation(
   prepared: PreparedLlmEvaluation,
   apiKey: string,
   fetchImpl: typeof fetch,
-  nowMs: () => number
+  nowMs: () => number,
+  reasoningEffort: LlmReasoningEffort
 ): Promise<LlmModelEvaluationResult> {
-  const request = buildResponsesRequest(model, prepared.candidatePayload);
+  const request = buildResponsesRequest(model, prepared.candidatePayload, reasoningEffort);
   const startedAt = nowMs();
   let response: Response;
   try {
@@ -820,10 +842,17 @@ export async function runLlmComparison(
   options: RunLlmComparisonOptions
 ): Promise<LlmComparisonReport> {
   const prepared = prepareLlmEvaluation(fixture);
+  const reasoningEffort = options.reasoningEffort ?? "low";
+  const evaluationModels = options.models?.length
+    ? [...options.models]
+    : [...LLM_EVALUATION_MODELS];
+  if (new Set(evaluationModels).size !== evaluationModels.length) {
+    throw new Error("Model comparison cannot contain duplicate models");
+  }
   let results: LlmModelEvaluationResult[];
 
   if (!options.live) {
-    results = LLM_EVALUATION_MODELS.map((model) => notRunResult(model, prepared));
+    results = evaluationModels.map((model) => notRunResult(model, prepared));
   } else {
     if (!options.apiKey?.trim()) {
       throw new Error("--live requires OPENAI_API_KEY; no API requests were sent");
@@ -832,14 +861,15 @@ export async function runLlmComparison(
       prepared.candidatePayload.candidateEvents.length === 0 ||
       prepared.candidatePayload.policy.maximumSelections === 0
     ) {
-      results = LLM_EVALUATION_MODELS.map((model) =>
+      results = evaluationModels.map((model) =>
         notRunResult(model, prepared, "No discovery candidates required a paid model call")
       );
       return {
         schemaVersion: 2,
         mode: "live",
+        reasoningEffort,
         evaluationId: fixture.id,
-        models: LLM_EVALUATION_MODELS,
+        models: evaluationModels,
         pricing: {
           asOf: RATE_CARD_AS_OF,
           currency: "USD",
@@ -853,7 +883,8 @@ export async function runLlmComparison(
           exactTiersLockedOutsideModel: true,
           candidateFactsImmutable: true,
           evidenceBoundSelections: true,
-          unsupportedClaimsRejected: true
+          unsupportedClaimsRejected: true,
+          preLimitCandidatePool: true
         },
         lockedExactEventIds: prepared.lockedExactEvents.map((event) => event.canonicalKey),
         candidatePayload: prepared.candidatePayload,
@@ -863,18 +894,19 @@ export async function runLlmComparison(
     const fetchImpl = options.fetchImpl ?? fetch;
     const nowMs = options.nowMs ?? (() => performance.now());
     results = [];
-    for (const model of LLM_EVALUATION_MODELS) {
+    for (const model of evaluationModels) {
       const result = await runModelEvaluation(
         model,
         fixture,
         prepared,
         options.apiKey,
         fetchImpl,
-        nowMs
+        nowMs,
+        reasoningEffort
       );
       results.push(result);
       if (isBillingExhausted(result)) {
-        for (const skippedModel of LLM_EVALUATION_MODELS.slice(results.length)) {
+        for (const skippedModel of evaluationModels.slice(results.length)) {
           results.push(notRunResult(
             skippedModel,
             prepared,
@@ -889,8 +921,9 @@ export async function runLlmComparison(
   return {
     schemaVersion: 2,
     mode: options.live ? "live" : "dry-run",
+    reasoningEffort,
     evaluationId: fixture.id,
-    models: LLM_EVALUATION_MODELS,
+    models: evaluationModels,
     pricing: {
       asOf: RATE_CARD_AS_OF,
       currency: "USD",
@@ -904,7 +937,8 @@ export async function runLlmComparison(
       exactTiersLockedOutsideModel: true,
       candidateFactsImmutable: true,
       evidenceBoundSelections: true,
-      unsupportedClaimsRejected: true
+      unsupportedClaimsRejected: true,
+      preLimitCandidatePool: true
     },
     lockedExactEventIds: prepared.lockedExactEvents.map((event) => event.canonicalKey),
     candidatePayload: prepared.candidatePayload,
@@ -914,7 +948,7 @@ export async function runLlmComparison(
 
 export function formatLlmComparisonSummary(report: LlmComparisonReport): string {
   const lines = [
-    `Front Row LLM comparison: ${report.evaluationId} (${report.mode})`,
+    `Front Row LLM comparison: ${report.evaluationId} (${report.mode}, ${report.reasoningEffort})`,
     `Locked T0/T1: ${report.lockedExactEventIds.length}; verified T2/T3 candidates: ${report.candidatePayload.candidateEvents.length}`
   ];
   for (const result of report.results) {

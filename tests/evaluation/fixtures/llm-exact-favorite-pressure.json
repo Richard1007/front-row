@@ -1,0 +1,42 @@
+{
+  "id": "llm-exact-favorite-pressure",
+  "description": "Four exact favorites must remain locked while discovery competes for only five remaining slots.",
+  "now": "2026-09-20T12:00:00.000Z",
+  "precisionK": 9,
+  "input": {
+    "artists": [
+      { "name": "王力宏", "weight": "priority", "canonicalId": "frontrow:artist:wang-leehom" },
+      { "name": "陶喆", "weight": "priority", "canonicalId": "musicbrainz:38fe7fb3-2bde-4672-8016-2ba6f7d1808f" },
+      { "name": "Radiohead", "weight": "like", "canonicalId": "musicbrainz:radiohead" },
+      { "name": "Bruno Mars", "weight": "like", "canonicalId": "frontrow:artist:bruno-mars" }
+    ],
+    "genres": [{ "name": "R&B", "weight": "priority" }, { "name": "Alternative", "weight": "like" }, { "name": "Jazz", "weight": "occasional" }],
+    "languages": [], "languageMode": "any",
+    "origin": { "label": "Oakland, CA", "latitude": 37.8044, "longitude": -122.2712 },
+    "maxTravelMinutes": 120, "forecastMonths": 4
+  },
+  "knownFavoriteShows": [
+    { "artist": "王力宏", "eventKeys": ["pressure-wang"] },
+    { "artist": "陶喆", "eventKeys": ["pressure-tao"] },
+    { "artist": "Radiohead", "eventKeys": ["pressure-radiohead"] },
+    { "artist": "Bruno Mars", "eventKeys": ["pressure-bruno"] }
+  ],
+  "relevanceLabels": { "pressure-wang": true, "pressure-tao": true, "pressure-radiohead": true, "pressure-bruno": true, "pressure-jj": true, "pressure-the-smile": true, "pressure-dangelo": true, "pressure-muse": false, "pressure-generic-jazz": false },
+  "humanRelevanceAnnotations": {
+    "pressure-wang": { "relevant": true, "rationale": "Exact favorite." }, "pressure-tao": { "relevant": true, "rationale": "Exact favorite." }, "pressure-radiohead": { "relevant": true, "rationale": "Exact favorite." }, "pressure-bruno": { "relevant": true, "rationale": "Exact favorite." },
+    "pressure-jj": { "relevant": true, "rationale": "Strong Mandarin pop and R&B adjacency." }, "pressure-the-smile": { "relevant": true, "rationale": "Direct Radiohead-related art rock." }, "pressure-dangelo": { "relevant": true, "rationale": "Strong R&B musicianship match." },
+    "pressure-muse": { "relevant": false, "rationale": "Broad weak graph similarity should not beat scarce slots." }, "pressure-generic-jazz": { "relevant": false, "rationale": "A category-only jazz match is insufficient under exact pressure." }
+  },
+  "referenceSelectionIds": ["pressure-jj", "pressure-the-smile", "pressure-dangelo"], "expectedExcludedEventKeys": [],
+  "events": [
+    { "canonicalKey": "pressure-wang", "name": "Wang Leehom Live", "startAt": "2026-10-01T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "Wang Leehom" }], "genres": ["R&B"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "pressure-wang", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "pressure-tao", "name": "David Tao Live", "startAt": "2026-10-02T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "David Tao" }], "genres": ["R&B"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "pressure-tao", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "pressure-radiohead", "name": "Radiohead Live", "startAt": "2026-10-03T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "Radiohead", "canonicalId": "musicbrainz:radiohead" }], "genres": ["Alternative"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "pressure-radiohead", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "pressure-bruno", "name": "Bruno Mars Live", "startAt": "2026-10-04T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "Bruno Mars" }], "genres": ["R&B"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "pressure-bruno", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "pressure-jj", "name": "JJ Lin Live", "startAt": "2026-10-05T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "JJ Lin", "similarTo": [{ "preferenceCanonicalId": "frontrow:artist:wang-leehom", "score": 0.82, "confidence": 0.9, "source": "listenbrainz" }] }], "genres": ["R&B"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "pressure-jj", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "pressure-the-smile", "name": "The Smile Live", "startAt": "2026-10-06T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "The Smile", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:radiohead", "score": 0.85, "confidence": 0.98, "source": "manual" }] }], "genres": ["Alternative"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "pressure-the-smile", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "pressure-dangelo", "name": "D'Angelo Live", "startAt": "2026-10-07T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "D'Angelo", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:38fe7fb3-2bde-4672-8016-2ba6f7d1808f", "score": 0.84, "confidence": 0.9, "source": "manual" }] }], "genres": ["R&B"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "pressure-dangelo", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "pressure-muse", "name": "Muse Live", "startAt": "2026-10-08T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "Muse", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:radiohead", "score": 0.55, "confidence": 0.6, "source": "provider" }] }], "genres": ["Alternative"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "pressure-muse", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "pressure-generic-jazz", "name": "Generic Jazz Night", "startAt": "2026-10-09T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "Local Jazz Players" }], "genres": ["Jazz"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "pressure-generic-jazz", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] }
+  ]
+}
