@@ -67,8 +67,8 @@ describe("provider contract", () => {
     );
     expect(firstUrl.searchParams.get("keyword")).toBe("王力宏");
     expect(firstUrl.searchParams.get("classificationName")).toBe("Music");
-    expect(firstUrl.searchParams.get("startDateTime")).toBe(NOW.toISOString());
-    expect(firstUrl.searchParams.get("endDateTime")).toBe("2026-12-18T18:00:00.000Z");
+    expect(firstUrl.searchParams.get("startDateTime")).toBe("2026-09-19T18:00:00Z");
+    expect(firstUrl.searchParams.get("endDateTime")).toBe("2026-12-18T18:00:00Z");
     expect(firstUrl.searchParams.get("radius")).toBe("90");
     expect(firstUrl.searchParams.get("geoPoint")).toMatch(/^[0-9b-hjkmnp-z]{9}$/);
     const regionalUrl = new URL(String(fetcher.mock.calls[2]?.[0]));

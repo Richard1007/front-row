@@ -89,8 +89,8 @@ export class TicketmasterProvider implements EventProvider {
       const params = new URLSearchParams({
         apikey: this.apiKey,
         classificationName: "Music",
-        startDateTime: now.toISOString(),
-        endDateTime: forecastEnd(now, input.forecastDays).toISOString(),
+        startDateTime: ticketmasterDateTime(now),
+        endDateTime: ticketmasterDateTime(forecastEnd(now, input.forecastDays)),
         geoPoint: encodeGeohash(input.origin),
         radius: String(candidateRadiusMiles(input.maxTravelMinutes)),
         unit: "miles",
@@ -246,4 +246,9 @@ function localDateTime(date?: string, time?: string): string | undefined {
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function ticketmasterDateTime(value: Date): string {
+  // Discovery API rejects ISO timestamps with fractional seconds.
+  return value.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
