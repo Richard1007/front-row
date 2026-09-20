@@ -26,6 +26,17 @@ describe("validateForm", () => {
     expect(validateForm(state).artists).toContain("至少");
   });
 
+  it("returns English validation copy when requested", () => {
+    const state = validState();
+    state.artists = [];
+    state.latitude = "";
+
+    const errors = validateForm(state, "en");
+
+    expect(errors.artists).toBe("Enter at least one artist you genuinely want to see.");
+    expect(errors.latitude).toBe("Latitude must be between -90 and 90.");
+  });
+
   it("requires weighted language percentages to total 100", () => {
     const state = validState();
     state.languages[0]!.percentage = "60";

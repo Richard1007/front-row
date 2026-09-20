@@ -25,6 +25,7 @@ type JsonRecord = Record<string, unknown>;
 export interface TicketmasterProviderOptions extends ProviderDependencies {
   apiKey?: string;
   baseUrl?: string;
+  minRequestIntervalMs?: number;
 }
 
 export class TicketmasterProvider implements EventProvider {
@@ -34,6 +35,7 @@ export class TicketmasterProvider implements EventProvider {
   private readonly fetcher: typeof fetch;
   private readonly now: () => Date;
   private readonly timeoutMs: number;
+  private readonly minRequestIntervalMs: number;
 
   constructor(options: TicketmasterProviderOptions = {}) {
     this.apiKey = options.apiKey?.trim() || undefined;
@@ -41,6 +43,8 @@ export class TicketmasterProvider implements EventProvider {
     this.fetcher = options.fetch ?? fetch;
     this.now = options.now ?? (() => new Date());
     this.timeoutMs = options.requestTimeoutMs ?? 10_000;
+    // Ticketmaster's public FAQ documents a conservative 2 requests/second.
+    this.minRequestIntervalMs = options.minRequestIntervalMs ?? 500;
   }
 
   capability(): ProviderCapability {
@@ -78,7 +82,10 @@ export class TicketmasterProvider implements EventProvider {
 
     // Direct artist queries protect long-tail artists from a popularity-ranked
     // regional feed. Keep these serial to be conservative with provider quotas.
-    for (const artist of queries) {
+    for (const [index, artist] of queries.entries()) {
+      if (index > 0 && this.minRequestIntervalMs > 0) {
+        await delay(this.minRequestIntervalMs);
+      }
       const params = new URLSearchParams({
         apikey: this.apiKey,
         classificationName: "Music",
@@ -235,4 +242,8 @@ function text(value: unknown): string | undefined {
 function localDateTime(date?: string, time?: string): string | undefined {
   if (!date) return undefined;
   return `${date}T${time ?? "00:00:00"}`;
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

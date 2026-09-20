@@ -55,6 +55,7 @@ describe("provider contract", () => {
       apiKey: "tm_test_secret",
       fetch: fetcher as typeof fetch,
       now: () => NOW,
+      minRequestIntervalMs: 0,
     });
 
     const events = await provider.fetchEvents(input);
@@ -92,6 +93,7 @@ describe("provider contract", () => {
       apiKey: "tm_test_secret",
       fetch: fetcher,
       now: () => NOW,
+      minRequestIntervalMs: 0,
     });
 
     const events = await provider.fetchEvents(input);
@@ -201,7 +203,7 @@ describe("provider contract", () => {
     await expect(provider.fetchEvents(input)).rejects.toBeInstanceOf(ProviderUnavailableError);
   });
 
-  it("exposes the stable registry contract and defaults safely to fixtures", async () => {
+  it("supports the explicit fixture mode", async () => {
     const registry = createProviderRegistry(
       { FR_DATA_MODE: "fixture" },
       { now: () => NOW },
@@ -215,6 +217,20 @@ describe("provider contract", () => {
       status: "success",
     });
     expect(result.diagnostics.find((item) => item.provider === "stubhub")).toMatchObject({
+      status: "skipped",
+      mode: "disabled",
+    });
+  });
+
+  it("defaults to live mode and never silently returns fixture events", async () => {
+    const registry = createProviderRegistry({}, { now: () => NOW });
+
+    expect(registry.capabilities().find((item) => item.id === "fixture")).toMatchObject({
+      mode: "disabled",
+    });
+    const result = await registry.fetchEvents(input);
+    expect(result.events).toEqual([]);
+    expect(result.diagnostics.find((item) => item.provider === "fixture")).toMatchObject({
       status: "skipped",
       mode: "disabled",
     });

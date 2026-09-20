@@ -16,17 +16,17 @@ npm run dev
 
 Open the local address printed after `Local:` in the terminal, normally [http://127.0.0.1:5173](http://127.0.0.1:5173). If that port is already occupied, Vite automatically prints the next available port. The local API listens only on `127.0.0.1:8787`.
 
-The default `FR_DATA_MODE=fixture` uses a synthetic Bay Area scenario, so no API keys are required. The page displays **演示数据** in this mode. Click **载入王力宏湾区示例**, then generate recommendations to verify the complete flow.
+Front Row now defaults to English and `FR_DATA_MODE=live`. Until at least one API key is configured, the page clearly reports that its real-data sources are unavailable and returns no made-up recommendations. Use the language control in the page header to switch the entire interface to Chinese.
 
 ## Try real event data
 
 1. Create a Ticketmaster Discovery API key and/or a JamBase Data API key.
-2. Put the keys in `.env`:
+2. Put one or both keys in `.env`:
 
 ```dotenv
 FR_DATA_MODE=live
 TICKETMASTER_API_KEY=your_key
-JAMBASE_API_KEY=your_key
+JBD_API_KEY=your_key
 ```
 
 3. Restart `npm run dev`.
@@ -36,6 +36,10 @@ API keys remain in the localhost server and are never sent to browser code. Live
 If the page still says a source is unconfigured, confirm that the file is named exactly `.env`, restart `npm run dev`, and check that the corresponding key line is not empty.
 
 StubHub is represented in the provider status but remains disabled. Its official Catalog API requires approved partner or affiliate credentials, so Milestone 0 does not call it and does not scrape its website.
+
+## Optional demonstration data
+
+To test the interface without contacting any provider, set `FR_DATA_MODE=fixture` in `.env` and restart the app. The page labels these results as demonstration data. This mode is an explicit testing option, never the default and never a silent fallback in live mode.
 
 ## What to evaluate
 

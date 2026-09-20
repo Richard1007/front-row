@@ -67,6 +67,12 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 
 .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; color: var(--lime); background: var(--ink); font-family: "DM Mono", monospace; }
 
+.header-actions { display: flex; align-items: center; gap: 12px; }
+
+.locale-switch { display: inline-flex; margin: 0; padding: 2px; background: #e3dfd5; border: 1px solid var(--line); border-radius: 999px; }
+.locale-switch button { min-height: 30px; padding: 0 10px; color: var(--muted); background: transparent; border: 0; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.locale-switch button.is-selected { color: var(--paper); background: var(--green); }
+
 .local-badge, .count-badge, .tier-badge, .score-pill, .source-row > *, .run-time {
   font-family: "DM Mono", monospace;
   font-size: 12px;
@@ -354,6 +360,9 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 25px
 
 @media (max-width: 430px) {
   .brand { font-size: 13px; }
+  .local-badge { display: none; }
+  .header-actions { gap: 6px; }
+  .locale-switch button { padding: 0 8px; }
   .preference-row { grid-template-columns: minmax(0, 1fr) 86px 32px; }
   .language-row { grid-template-columns: minmax(0, 1fr) 80px 32px; }
   .coordinate-grid { grid-template-columns: 1fr; gap: 0; }

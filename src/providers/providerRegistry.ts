@@ -150,7 +150,7 @@ function effectiveCapability(
 }
 
 function registryMode(value: string | undefined): RegistryMode {
-  return value === "live" || value === "auto" ? value : "fixture";
+  return value === "fixture" || value === "auto" ? value : "live";
 }
 
 function positiveInteger(value: string | undefined): number | undefined {

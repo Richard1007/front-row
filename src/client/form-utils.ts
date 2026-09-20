@@ -4,6 +4,7 @@ import type {
   ValidationInput,
   WeightedPreference
 } from "../core/types";
+import { tr, type Locale } from "./i18n";
 
 export interface EditablePreference {
   id: string;
@@ -57,7 +58,7 @@ const cleanLanguages = (items: EditableLanguage[]): LanguagePreference[] =>
 const parseRequiredNumber = (value: string): number =>
   value.trim() === "" ? Number.NaN : Number(value);
 
-export function validateForm(state: ValidationFormState): FormErrors {
+export function validateForm(state: ValidationFormState, locale: Locale = "zh"): FormErrors {
   const errors: FormErrors = {};
   const artists = cleanPreferences(state.artists);
   const genres = cleanPreferences(state.genres);
@@ -66,13 +67,13 @@ export function validateForm(state: ValidationFormState): FormErrors {
   const travelMinutes = parseRequiredNumber(state.maxTravelMinutes);
 
   if (artists.length === 0) {
-    errors.artists = "请至少填写一位你真正想看的艺人。";
+    errors.artists = tr(locale, "formArtistRequired");
   } else if (artists.length > 10) {
-    errors.artists = "最多可以填写 10 位艺人。";
+    errors.artists = tr(locale, "formArtistMax");
   }
 
   if (genres.length > 3) {
-    errors.genres = "最多可以填写 3 种音乐风格。";
+    errors.genres = tr(locale, "formGenreMax");
   }
 
   if (state.languageMode === "weighted") {
@@ -83,25 +84,25 @@ export function validateForm(state: ValidationFormState): FormErrors {
     const total = languages.reduce((sum, { percentage }) => sum + percentage, 0);
 
     if (languages.length === 0) {
-      errors.languages = "请至少填写一种演唱语言，或者选择“语言不限”。";
+      errors.languages = tr(locale, "formLanguageRequired");
     } else if (hasInvalidPercentage) {
-      errors.languages = "每一种语言的比例必须在 0% 到 100% 之间。";
+      errors.languages = tr(locale, "formLanguageRange");
     } else if (Math.abs(total - 100) > 0.01) {
-      errors.languages = `语言比例目前合计 ${total}%，需要正好是 100%。`;
+      errors.languages = tr(locale, "formLanguageTotal", { total });
     }
   }
 
   if (!state.originLabel.trim()) {
-    errors.originLabel = "请给出发点写一个容易辨认的名称。";
+    errors.originLabel = tr(locale, "formOriginRequired");
   }
   if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
-    errors.latitude = "纬度需要在 -90 到 90 之间。";
+    errors.latitude = tr(locale, "formLatitude");
   }
   if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
-    errors.longitude = "经度需要在 -180 到 180 之间。";
+    errors.longitude = tr(locale, "formLongitude");
   }
   if (!Number.isFinite(travelMinutes) || travelMinutes < 15 || travelMinutes > 360) {
-    errors.maxTravelMinutes = "最长出行时间需要在 15 到 360 分钟之间。";
+    errors.maxTravelMinutes = tr(locale, "formTravel");
   }
 
   return errors;

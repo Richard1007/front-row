@@ -1,0 +1,23 @@
+ticket: gh-2
+type: story
+phase: 06-review
+complexity: standard
+depth_profile:
+  research: deep
+  refine: standard
+  design: standard
+  architecture: light
+  implementation: standard
+  qa: standard
+readiness:
+  status: PASS
+  notes:
+    - English is the first-visit default and the complete interface can switch to Chinese.
+    - Live providers are the default; fixture data requires an explicit local setting.
+    - Ticketmaster and JamBase onboarding requirements were verified against official sources.
+review:
+  status: PASS
+  tests: 69
+  build: PASS
+  browser_smoke: PASS
+  next_action: Create the Ticketmaster and JamBase accounts, store keys in .env, and run the first live comparison.
