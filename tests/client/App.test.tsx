@@ -69,7 +69,8 @@ describe("simple preference form", () => {
     expect(screen.getByText(/not a recommendation quota/i)).toBeTruthy();
     expect(screen.getByText("What T0–T3 mean")).toBeTruthy();
     expect(screen.getByText("A confirmed show by an artist you selected.")).toBeTruthy();
-    expect(screen.getByText(/Up to three discovery picks/)).toBeTruthy();
+    expect(screen.getByText(/Up to five discovery picks/)).toBeTruthy();
+    expect(screen.getByText(/selected artists come first/)).toBeTruthy();
   });
 
   it("shows the truthful result funnel supported by the current API", async () => {

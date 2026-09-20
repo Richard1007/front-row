@@ -35,9 +35,10 @@ const TIER_ORDER: Record<RecommendationTier, number> = {
 };
 
 const RELIABLE_LANGUAGE_CONFIDENCE = 0.5;
-const DEFAULT_RESULT_LIMIT = 10;
-const MAX_RESULT_LIMIT = 10;
-const MAX_EXPLORATION_RESULTS = 3;
+const DEFAULT_RESULT_LIMIT = 9;
+const MAX_RESULT_LIMIT = 9;
+const ABSOLUTE_RESULT_LIMIT = 10;
+const MAX_EXPLORATION_RESULTS = 5;
 
 export interface RecommendationOptions {
   now?: Date;
@@ -488,9 +489,105 @@ function rankEvent(
   };
 }
 
+function rankedDisplayOrder(left: RankedEvent, right: RankedEvent): number {
+  const tierDifference = TIER_ORDER[left.tier] - TIER_ORDER[right.tier];
+  if (tierDifference !== 0) return tierDifference;
+  const scoreDifference = right.score.final - left.score.final;
+  if (scoreDifference !== 0) return scoreDifference;
+  const dateDifference = Date.parse(left.startAt) - Date.parse(right.startAt);
+  if (dateDifference !== 0) return dateDifference;
+  return left.canonicalKey.localeCompare(right.canonicalKey);
+}
+
+function exactPreferenceKey(preference: WeightedPreference): string {
+  return preference.canonicalId ?? normalizedText(preference.name);
+}
+
+interface ExactSelectionCandidate {
+  event: RankedEvent;
+  preference: WeightedPreference;
+}
+
+function exactSelectionOrder(
+  left: ExactSelectionCandidate,
+  right: ExactSelectionCandidate
+): number {
+  const importanceDifference =
+    IMPORTANCE_VALUES[right.preference.weight] - IMPORTANCE_VALUES[left.preference.weight];
+  if (importanceDifference !== 0) return importanceDifference;
+  const dateDifference = Date.parse(left.event.startAt) - Date.parse(right.event.startAt);
+  if (dateDifference !== 0) return dateDifference;
+  const scoreDifference = right.event.score.final - left.event.score.final;
+  if (scoreDifference !== 0) return scoreDifference;
+  return left.event.canonicalKey.localeCompare(right.event.canonicalKey);
+}
+
+/**
+ * Protects one show per explicitly selected artist before allocating remaining
+ * exact-artist slots. When there are more artists than slots, importance and
+ * event date provide deterministic prioritization.
+ */
+function selectExactEvents(
+  events: RankedEvent[],
+  preferences: WeightedPreference[],
+  limit: number
+): RankedEvent[] {
+  const candidates = events
+    .map((event) => {
+      const exact = exactArtistMatch(event, preferences);
+      return exact ? { event, preference: exact.preference } : undefined;
+    })
+    .filter((candidate): candidate is ExactSelectionCandidate => Boolean(candidate))
+    .sort(exactSelectionOrder);
+  if (candidates.length <= limit) return candidates.map((candidate) => candidate.event);
+
+  const selected: ExactSelectionCandidate[] = [];
+  const selectedKeys = new Set<string>();
+  const selectedEvents = new Set<string>();
+  for (const candidate of candidates) {
+    const preferenceKey = exactPreferenceKey(candidate.preference);
+    if (selectedKeys.has(preferenceKey)) continue;
+    selected.push(candidate);
+    selectedKeys.add(preferenceKey);
+    selectedEvents.add(candidate.event.canonicalKey);
+    if (selected.length >= limit) return selected.map((item) => item.event);
+  }
+
+  for (const candidate of candidates) {
+    if (selectedEvents.has(candidate.event.canonicalKey)) continue;
+    selected.push(candidate);
+    selectedEvents.add(candidate.event.canonicalKey);
+    if (selected.length >= limit) break;
+  }
+  return selected.map((candidate) => candidate.event);
+}
+
+function primaryPerformerKey(event: RankedEvent): string {
+  const performer =
+    event.performers.find((item) => item.role === "headliner") ?? event.performers[0];
+  if (!performer) return event.canonicalKey;
+  return performer.canonicalId ?? normalizedText(performer.name);
+}
+
+/** Preserve quality order while presenting one event per performer first. */
+function diversifyPerformers(events: RankedEvent[]): RankedEvent[] {
+  const firstByPerformer: RankedEvent[] = [];
+  const repeats: RankedEvent[] = [];
+  const seen = new Set<string>();
+  for (const event of events) {
+    const key = primaryPerformerKey(event);
+    if (seen.has(key)) repeats.push(event);
+    else {
+      seen.add(key);
+      firstByPerformer.push(event);
+    }
+  }
+  return [...firstByPerformer, ...repeats];
+}
+
 /**
  * Provider-neutral recommendation pipeline: deduplicate, filter, score, explain,
- * and return at most ten strong events. Every T0/T1 result precedes discovery.
+ * and normally return fewer than ten strong events. Every T0/T1 result precedes discovery.
  */
 export function buildRecommendationSelection(
   input: ValidationInput,
@@ -498,10 +595,11 @@ export function buildRecommendationSelection(
   options: RecommendationOptions = {}
 ): RecommendationSelection {
   const now = options.now ?? new Date();
-  const requestedLimit = Number.isFinite(options.limit)
+  const hasExplicitLimit = Number.isFinite(options.limit);
+  const requestedLimit = hasExplicitLimit
     ? Math.floor(options.limit!)
     : DEFAULT_RESULT_LIMIT;
-  const limit = Math.min(MAX_RESULT_LIMIT, Math.max(1, requestedLimit));
+  const normalLimit = Math.min(MAX_RESULT_LIMIT, Math.max(1, requestedLimit));
   const enrichedInput = enrichValidationInput(input);
   const enrichedEvents = events.map(enrichEvent);
   const deduplicatedEvents = deduplicateEvents(enrichedEvents);
@@ -521,32 +619,53 @@ export function buildRecommendationSelection(
   const ranked = deduplicatedEvents
     .map((event) => rankEvent(enrichedInput, event, now, funnel))
     .filter((event): event is RankedEvent => Boolean(event))
-    .sort((left, right) => {
-      const tierDifference = TIER_ORDER[left.tier] - TIER_ORDER[right.tier];
-      if (tierDifference !== 0) return tierDifference;
-      const scoreDifference = right.score.final - left.score.final;
-      if (scoreDifference !== 0) return scoreDifference;
-      const dateDifference = Date.parse(left.startAt) - Date.parse(right.startAt);
-      if (dateDifference !== 0) return dateDifference;
-      return left.canonicalKey.localeCompare(right.canonicalKey);
-    });
+    .sort(rankedDisplayOrder);
 
-  const results: RankedEvent[] = [];
-  let explorationCount = 0;
-  for (const event of ranked) {
+  const exact = ranked.filter((event) => event.tier === "T0" || event.tier === "T1");
+  const exactArtistKeys = new Set(
+    exact
+      .map((event) => exactArtistMatch(event, enrichedInput.artists)?.preference)
+      .filter((preference): preference is WeightedPreference => Boolean(preference))
+      .map(exactPreferenceKey)
+  );
+  // The normal digest stays below ten. The only exception protects one show
+  // for each of ten explicitly selected artists when all ten have an eligible
+  // event and the caller did not request a smaller custom limit.
+  const limit =
+    !hasExplicitLimit &&
+    enrichedInput.artists.length >= ABSOLUTE_RESULT_LIMIT &&
+    exactArtistKeys.size >= ABSOLUTE_RESULT_LIMIT
+      ? ABSOLUTE_RESULT_LIMIT
+      : normalLimit;
+  const selectedExact = selectExactEvents(exact, enrichedInput.artists, limit);
+  funnel.rejected.result_limit += exact.length - selectedExact.length;
+
+  const results: RankedEvent[] = [...selectedExact];
+  const tierTwo = diversifyPerformers(ranked.filter((event) => event.tier === "T2"));
+  const tierThree = diversifyPerformers(ranked.filter((event) => event.tier === "T3"));
+
+  for (const event of tierTwo) {
     if (results.length >= limit) {
       funnel.rejected.result_limit += 1;
       continue;
     }
-    if (event.tier === "T3") {
-      if (explorationCount >= MAX_EXPLORATION_RESULTS) {
-        funnel.rejected.exploration_cap += 1;
-        continue;
-      }
-      explorationCount += 1;
-    }
     results.push(event);
   }
+
+  let explorationCount = 0;
+  for (const event of tierThree) {
+    if (results.length >= limit) {
+      funnel.rejected.result_limit += 1;
+      continue;
+    }
+    if (explorationCount >= MAX_EXPLORATION_RESULTS) {
+      funnel.rejected.exploration_cap += 1;
+      continue;
+    }
+    results.push(event);
+    explorationCount += 1;
+  }
+  results.sort(rankedDisplayOrder);
   funnel.selectedEvents = results.length;
   return { recommendations: results, funnel };
 }

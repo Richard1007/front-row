@@ -332,7 +332,7 @@ describe("buildRecommendations", () => {
     ]);
   });
 
-  it("limits normal results to ten and includes at most three exploration events", () => {
+  it("keeps the hard result limit below ten without relaxing affinity", () => {
     const strong = Array.from({ length: 10 }, (_, index) =>
       event(`strong-${index}`, {
         performers: [{
@@ -358,11 +358,204 @@ describe("buildRecommendations", () => {
     );
 
     const result = buildRecommendations(input(), [...strong, ...exploratory], { now: NOW });
-    expect(result).toHaveLength(10);
+    expect(result).toHaveLength(9);
     expect(result.filter((item) => item.tier === "T3")).toHaveLength(0);
 
     const onlyExploration = buildRecommendations(input(), exploratory, { now: NOW });
     expect(onlyExploration.filter((item) => item.tier === "T3")).toHaveLength(2);
+  });
+
+  it("never lets T2 or T3 displace an eligible exact-artist event", () => {
+    const lowWeightExactInput = input({
+      artists: [{ name: "Exact Artist", canonicalId: "artist:exact", weight: "occasional" }]
+    });
+    const exact = event("protected-exact", {
+      performers: [{ name: "Exact Artist", canonicalId: "artist:exact" }]
+    });
+    const discovery = Array.from({ length: 12 }, (_, index) =>
+      event(`strong-discovery-${index}`, {
+        performers: [{
+          name: `Discovery ${index}`,
+          similarTo: [{
+            preferenceCanonicalId: "artist:exact",
+            score: 1,
+            confidence: 1,
+            source: "manual"
+          }]
+        }]
+      })
+    );
+
+    const selection = buildRecommendationSelection(
+      lowWeightExactInput,
+      [...discovery, exact],
+      { now: NOW }
+    );
+
+    expect(selection.recommendations).toHaveLength(9);
+    expect(selection.recommendations[0]).toMatchObject({
+      canonicalKey: "protected-exact",
+      tier: "T1"
+    });
+    expect(selection.recommendations.filter((item) => item.tier === "T2")).toHaveLength(8);
+    expect(selection.funnel.rejected.result_limit).toBe(4);
+  });
+
+  it("fills remaining slots with discovery after including every eligible exact event", () => {
+    const exact = Array.from({ length: 3 }, (_, index) =>
+      event(`exact-fill-${index}`, {
+        startAt: `2026-10-${String(index + 10).padStart(2, "0")}T03:00:00.000Z`,
+        performers: [{ name: "Wang Leehom", canonicalId: "artist:leehom" }]
+      })
+    );
+    const discovery = Array.from({ length: 8 }, (_, index) =>
+      event(`discovery-fill-${index}`, {
+        performers: [{
+          name: `Related Fill ${index}`,
+          similarTo: [{
+            preferenceCanonicalId: "artist:leehom",
+            score: 0.8,
+            confidence: 0.9,
+            source: "listenbrainz"
+          }]
+        }]
+      })
+    );
+
+    const result = buildRecommendations(input(), [...discovery, ...exact], { now: NOW });
+    expect(result).toHaveLength(9);
+    expect(result.slice(0, 3).every((item) => item.tier === "T1")).toBe(true);
+    expect(result.filter((item) => item.tier === "T2")).toHaveLength(6);
+  });
+
+  it("returns fewer than the limit when no additional event has affinity", () => {
+    const exact = event("only-relevant", {
+      performers: [{ name: "Wang Leehom", canonicalId: "artist:leehom" }]
+    });
+    const irrelevant = Array.from({ length: 12 }, (_, index) =>
+      event(`irrelevant-${index}`, { genres: ["Death metal"] })
+    );
+
+    const selection = buildRecommendationSelection(input(), [exact, ...irrelevant], {
+      now: NOW
+    });
+    expect(selection.recommendations.map((item) => item.canonicalKey)).toEqual([
+      "only-relevant"
+    ]);
+    expect(selection.funnel.rejected.no_preference_affinity).toBe(12);
+  });
+
+  it("protects one show per selected artist before adding repeat exact shows", () => {
+    const multiArtistInput = input({
+      artists: [
+        { name: "Artist A", canonicalId: "artist:a", weight: "priority" },
+        { name: "Artist B", canonicalId: "artist:b", weight: "like" },
+        { name: "Artist C", canonicalId: "artist:c", weight: "occasional" }
+      ]
+    });
+    const artistAShows = Array.from({ length: 10 }, (_, index) =>
+      event(`artist-a-${index}`, {
+        startAt: `2026-10-${String(index + 10).padStart(2, "0")}T03:00:00.000Z`,
+        performers: [{ name: "Artist A", canonicalId: "artist:a" }]
+      })
+    );
+    const artistB = event("artist-b", {
+      performers: [{ name: "Artist B", canonicalId: "artist:b" }]
+    });
+    const artistC = event("artist-c", {
+      performers: [{ name: "Artist C", canonicalId: "artist:c" }]
+    });
+
+    const selection = buildRecommendationSelection(
+      multiArtistInput,
+      [...artistAShows, artistB, artistC],
+      { now: NOW }
+    );
+    const performerNames = selection.recommendations.flatMap((item) =>
+      item.performers.map((performer) => performer.name)
+    );
+
+    expect(selection.recommendations).toHaveLength(9);
+    expect(performerNames).toEqual(
+      expect.arrayContaining(["Artist A", "Artist B", "Artist C"])
+    );
+    expect(selection.funnel.rejected.result_limit).toBe(3);
+  });
+
+  it("allows ten results only to represent ten selected artists with eligible shows", () => {
+    const artists = Array.from({ length: 10 }, (_, index) => ({
+      name: `Selected Artist ${index}`,
+      canonicalId: `artist:selected-${index}`,
+      weight: "priority" as const
+    }));
+    const exactShows = artists.map((artist, index) =>
+      event(`selected-artist-${index}`, {
+        performers: [{ name: artist.name, canonicalId: artist.canonicalId }]
+      })
+    );
+
+    const automatic = buildRecommendationSelection(
+      input({ artists }),
+      exactShows,
+      { now: NOW }
+    );
+    const explicitlyLimited = buildRecommendations(input({ artists }), exactShows, {
+      now: NOW,
+      limit: 9
+    });
+
+    expect(automatic.recommendations).toHaveLength(10);
+    expect(new Set(
+      automatic.recommendations.flatMap((item) =>
+        item.performers.map((performer) => performer.canonicalId)
+      )
+    ).size).toBe(10);
+    expect(automatic.funnel.rejected.result_limit).toBe(0);
+    expect(explicitlyLimited).toHaveLength(9);
+  });
+
+  it("caps T3 at five while keeping the no-affinity gate intact", () => {
+    const exploratory = Array.from({ length: 7 }, (_, index) =>
+      event(`exploration-cap-${index}`, { genres: ["Mandopop"] })
+    );
+    const selection = buildRecommendationSelection(input(), exploratory, { now: NOW });
+
+    expect(selection.recommendations).toHaveLength(5);
+    expect(selection.recommendations.every((item) => item.tier === "T3")).toBe(true);
+    expect(selection.funnel.rejected.exploration_cap).toBe(2);
+  });
+
+  it("prefers performer diversity when discovery quality is otherwise comparable", () => {
+    const similarity = [{
+      preferenceCanonicalId: "artist:leehom",
+      score: 0.8,
+      confidence: 0.9,
+      source: "listenbrainz" as const
+    }];
+    const repeats = Array.from({ length: 4 }, (_, index) =>
+      event(`repeat-related-${index}`, {
+        performers: [{
+          name: "Repeated Related Artist",
+          canonicalId: "artist:repeated-related",
+          similarTo: similarity
+        }]
+      })
+    );
+    const distinct = Array.from({ length: 3 }, (_, index) =>
+      event(`distinct-related-${index}`, {
+        performers: [{
+          name: `Distinct Related ${index}`,
+          canonicalId: `artist:distinct-related-${index}`,
+          similarTo: similarity
+        }]
+      })
+    );
+
+    const result = buildRecommendations(input(), [...repeats, ...distinct], {
+      now: NOW,
+      limit: 4
+    });
+    expect(new Set(result.map((item) => item.performers[0]?.canonicalId)).size).toBe(4);
   });
 
   it("accepts T3 with reliable genre or language affinity alone", () => {

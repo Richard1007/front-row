@@ -11,6 +11,7 @@ import type { ProviderCapability, ValidationResult } from "../core/types.js";
 import {
   applyExpansionEvidence,
   expandArtistPreferences,
+  hydrateExplicitArtists,
   inferArtistGenres,
   inferArtistLanguagePreferences,
   ListenBrainzClient,
@@ -83,15 +84,20 @@ app.post("/api/validation-runs", async (context) => {
   }
 
   const enrichedInput = enrichValidationInput(parsed.data);
+  const hydratedArtists = await hydrateExplicitArtists(enrichedInput.artists, {
+    resolveArtist: (name) => musicBrainz.resolveExactArtist(name),
+    artistDetails: (musicBrainzId) => musicBrainz.artistDetails(musicBrainzId)
+  });
+  const identityInput = { ...enrichedInput, artists: hydratedArtists };
   const inferredLanguageProfile = await inferArtistLanguagePreferences(
-    enrichedInput.artists,
+    identityInput.artists,
     { resolveArtist: (name) => musicBrainz.resolveExactArtist(name) }
   );
-  const inferredGenreProfile = await inferArtistGenres(enrichedInput.artists, {
+  const inferredGenreProfile = await inferArtistGenres(identityInput.artists, {
     resolveArtist: (name) => musicBrainz.resolveExactArtist(name)
   });
   const rankingInput = {
-    ...enrichedInput,
+    ...identityInput,
     inferredLanguages: inferredLanguageProfile.distribution,
     inferredGenres: inferredGenreProfile.signals.map((signal) => ({
       name: signal.genre,
@@ -99,7 +105,7 @@ app.post("/api/validation-runs", async (context) => {
       confidence: signal.confidence
     }))
   };
-  const expansion = await expandArtistPreferences(enrichedInput.artists, {
+  const expansion = await expandArtistPreferences(identityInput.artists, {
     resolveArtist: (name) => musicBrainz.resolveExactArtist(name),
     similarArtists: (musicBrainzId, limit) =>
       listenBrainz.similarArtists(musicBrainzId, limit),
