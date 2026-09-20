@@ -4,6 +4,10 @@ export interface CuratedArtistProfile {
   canonicalId: string;
   displayName: string;
   aliases: readonly string[];
+  providerIds?: Readonly<{
+    ticketmaster?: string;
+    jambase?: string;
+  }>;
   languages: readonly LanguageEvidence[];
 }
 
@@ -15,7 +19,11 @@ export const MILESTONE_ZERO_ARTIST_PROFILES: readonly CuratedArtistProfile[] = [
   {
     canonicalId: "frontrow:artist:wang-leehom",
     displayName: "王力宏",
-    aliases: ["王力宏", "Wang Leehom", "Leehom Wang"],
+    aliases: ["王力宏", "Wang Leehom", "Leehom Wang", "Lee-Hom Wang"],
+    providerIds: {
+      ticketmaster: "K8vZ9173-Uf",
+      jambase: "jambase:5911976"
+    },
     languages: [
       { language: "cmn", role: "primary", confidence: 0.95, source: "manual" },
       { language: "en", role: "significant", confidence: 0.85, source: "manual" }
@@ -25,6 +33,10 @@ export const MILESTONE_ZERO_ARTIST_PROFILES: readonly CuratedArtistProfile[] = [
     canonicalId: "frontrow:artist:jay-chou",
     displayName: "周杰伦",
     aliases: ["周杰伦", "周杰倫", "Jay Chou", "Chou Chieh-lun"],
+    providerIds: {
+      ticketmaster: "K8vZ917Gknf",
+      jambase: "jambase:3988227"
+    },
     languages: [
       { language: "cmn", role: "primary", confidence: 0.95, source: "manual" }
     ]
@@ -33,6 +45,10 @@ export const MILESTONE_ZERO_ARTIST_PROFILES: readonly CuratedArtistProfile[] = [
     canonicalId: "frontrow:artist:bruno-mars",
     displayName: "Bruno Mars",
     aliases: ["Bruno Mars", "Peter Gene Hernandez", "Peter Hernandez"],
+    providerIds: {
+      ticketmaster: "K8vZ917GJc7",
+      jambase: "jambase:276337"
+    },
     languages: [
       { language: "en", role: "primary", confidence: 0.95, source: "manual" }
     ]

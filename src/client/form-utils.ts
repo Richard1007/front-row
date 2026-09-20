@@ -4,7 +4,11 @@ import type {
   ValidationInput,
   WeightedPreference
 } from "../core/types";
+import { isGenreValue } from "../data/genres";
 import { tr, type Locale } from "./i18n";
+
+export { GENRE_OPTIONS, genreLabel, isGenreValue } from "../data/genres";
+export type { GenreValue } from "../data/genres";
 
 export interface EditablePreference {
   id: string;
@@ -47,6 +51,9 @@ const cleanPreferences = (items: EditablePreference[]): WeightedPreference[] =>
     .map(({ name, weight }) => ({ name: name.trim(), weight }))
     .filter(({ name }) => name.length > 0);
 
+const cleanGenres = (items: EditablePreference[]): WeightedPreference[] =>
+  cleanPreferences(items).filter(({ name }) => isGenreValue(name));
+
 const cleanLanguages = (items: EditableLanguage[]): LanguagePreference[] =>
   items
     .map(({ language, percentage }) => ({
@@ -74,6 +81,8 @@ export function validateForm(state: ValidationFormState, locale: Locale = "zh"):
 
   if (genres.length > 3) {
     errors.genres = tr(locale, "formGenreMax");
+  } else if (genres.some(({ name }) => !isGenreValue(name))) {
+    errors.genres = tr(locale, "formGenreInvalid");
   }
 
   if (state.languageMode === "weighted") {
@@ -111,7 +120,7 @@ export function validateForm(state: ValidationFormState, locale: Locale = "zh"):
 export function toValidationInput(state: ValidationFormState): ValidationInput {
   return {
     artists: cleanPreferences(state.artists),
-    genres: cleanPreferences(state.genres),
+    genres: cleanGenres(state.genres),
     languages: state.languageMode === "any" ? [] : cleanLanguages(state.languages),
     languageMode: state.languageMode,
     origin: {
@@ -120,6 +129,6 @@ export function toValidationInput(state: ValidationFormState): ValidationInput {
       longitude: parseRequiredNumber(state.longitude)
     },
     maxTravelMinutes: parseRequiredNumber(state.maxTravelMinutes),
-    forecastDays: 90
+    forecastMonths: 3
   };
 }

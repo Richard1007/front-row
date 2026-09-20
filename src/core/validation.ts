@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { normalizeLanguageTag } from "../data/artistProfiles.js";
+import { isGenreValue } from "../data/genres.js";
 import type { ValidationInput } from "./types.js";
 
 const importanceSchema = z.enum(["priority", "like", "occasional"]);
@@ -10,6 +11,14 @@ const weightedPreferenceSchema = z.object({
   weight: importanceSchema,
   canonicalId: z.string().trim().min(1).max(200).optional(),
   aliases: z.array(z.string().trim().min(1).max(120)).max(20).optional()
+});
+
+const genrePreferenceSchema = weightedPreferenceSchema.extend({
+  name: z
+    .string()
+    .trim()
+    .min(1, "名称不能为空")
+    .refine(isGenreValue, "请选择提供的音乐风格")
 });
 
 const languagePreferenceSchema = z.object({
@@ -28,7 +37,7 @@ function containsDuplicates(values: string[]): boolean {
 export const validationInputSchema = z
   .object({
     artists: z.array(weightedPreferenceSchema).max(10, "最多选择 10 位艺人"),
-    genres: z.array(weightedPreferenceSchema).max(3, "最多选择 3 种风格"),
+    genres: z.array(genrePreferenceSchema).max(3, "最多选择 3 种风格"),
     languages: z.array(languagePreferenceSchema).max(20),
     languageMode: z.enum(["weighted", "any"]),
     origin: z.object({
@@ -37,14 +46,14 @@ export const validationInputSchema = z
       longitude: z.number().finite().min(-180).max(180)
     }),
     maxTravelMinutes: z.number().int().min(1).max(720),
-    forecastDays: z.number().int().default(90)
+    forecastMonths: z.number().int().default(3)
   })
   .superRefine((value, context) => {
-    if (value.forecastDays !== 90) {
+    if (value.forecastMonths !== 3) {
       context.addIssue({
         code: "custom",
-        path: ["forecastDays"],
-        message: "Milestone 0 固定搜索未来 90 天"
+        path: ["forecastMonths"],
+        message: "Milestone 0 固定搜索未来三个月"
       });
     }
 

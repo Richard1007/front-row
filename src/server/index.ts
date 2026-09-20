@@ -1,7 +1,12 @@
 import "dotenv/config";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { buildRecommendations, deduplicateEvents, safeValidateInput } from "../core/index.js";
+import {
+  buildRecommendations,
+  deduplicateEvents,
+  enrichValidationInput,
+  safeValidateInput,
+} from "../core/index.js";
 import type { ProviderCapability, ValidationResult } from "../core/types.js";
 import { createProviderRegistry } from "../providers/index.js";
 import { deriveDataMode } from "./result.js";
@@ -56,9 +61,10 @@ app.post("/api/validation-runs", async (context) => {
     );
   }
 
-  const { events, diagnostics } = await registry.fetchEvents(parsed.data);
+  const enrichedInput = enrichValidationInput(parsed.data);
+  const { events, diagnostics } = await registry.fetchEvents(enrichedInput);
   const deduplicated = deduplicateEvents(events);
-  const recommendations = buildRecommendations(parsed.data, deduplicated);
+  const recommendations = buildRecommendations(enrichedInput, deduplicated);
   const dataMode = deriveDataMode(events, diagnostics);
 
   const result: ValidationResult = {

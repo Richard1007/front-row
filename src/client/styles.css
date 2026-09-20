@@ -139,6 +139,39 @@ main { width: min(1380px, 100%); margin: 0 auto; padding: 0 clamp(20px, 5vw, 76p
 
 .preference-row select { padding-right: 6px; }
 
+.genre-pool {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.genre-chip {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 11px;
+  color: #4f4c45;
+  background: #f4f1e9;
+  border: 1px solid #bcb7ab;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.genre-chip small { color: #817d74; font-family: "DM Mono", monospace; font-size: 10px; font-weight: 400; }
+.genre-chip:hover:not(:disabled) { color: var(--green); background: #eff6df; border-color: #75915f; }
+.genre-chip.is-selected { color: var(--lime); background: var(--green); border-color: var(--green); }
+.genre-chip.is-selected small { color: #cfdbd1; }
+
+.selected-genres { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.selected-genres > p { margin: 0 0 9px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.selected-genre-name { display: flex; min-width: 0; height: 44px; align-items: center; padding: 0 12px; overflow: hidden; background: #f4f1e9; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.selected-genre-row select { width: 100%; min-width: 0; height: 44px; padding: 0 6px 0 12px; }
+
 .icon-button { display: grid; place-items: center; width: 36px; height: 44px; padding: 0; color: #656159; background: transparent; border: 0; border-radius: 4px; font-size: 23px; }
 
 .icon-button:hover { color: #9d2d1c; background: #fae8df; }

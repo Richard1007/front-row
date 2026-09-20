@@ -2,6 +2,8 @@
 
 Front Row is currently a private, local validation tool for concert recommendations. It asks for weighted artists, genres, performance-language preferences, and a travel boundary, then compares available event sources and returns a small, explained shortlist.
 
+The current search horizon is the next three calendar months. Music styles come from a controlled bilingual list (up to three), while artist names can be entered in Chinese or English. Known aliases are resolved to each provider's stable artist identifier before live queries are made.
+
 Milestone 0 intentionally excludes accounts, payments, email delivery, cloud deployment, and LLM ranking.
 
 ## Run locally
@@ -52,6 +54,8 @@ For each validation run, check:
 - whether the explanation matches your actual preference;
 - whether the estimated travel boundary is reasonable;
 - which artists or fields need manual correction.
+
+Performance language is a real ranking signal, but only when Front Row has reliable metadata for that artist or event. Unknown language is neutral rather than a negative score. In Milestone 0, this metadata is intentionally curated for a small set of validation artists, including Wang Leehom, Jay Chou, and Bruno Mars.
 
 Fixture data verifies the workflow and ranking logic. It does **not** measure Ticketmaster or JamBase coverage; only a live run can do that. Validation runs are not written to disk. Per-card feedback stays in this browser through local storage.
 

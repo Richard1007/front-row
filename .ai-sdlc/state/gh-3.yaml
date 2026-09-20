@@ -1,0 +1,23 @@
+ticket: gh-3
+type: story
+phase: 07-complete
+complexity: standard
+depth_profile:
+  research: deep
+  refine: standard
+  design: light
+  architecture: standard
+  implementation: standard
+  qa: standard
+readiness:
+  status: PASS
+  notes:
+    - Chinese and English artist aliases resolve to stable Ticketmaster and JamBase artist identifiers.
+    - Music styles use one shared bilingual taxonomy and are limited to three selections in both client and server validation.
+    - The forecast uses three calendar months and includes the final local calendar date.
+review:
+  status: PASS
+  tests: 75
+  build: PASS
+  browser_smoke: PASS
+  regression: Wang Leehom at SAP Center on 2026-12-19 appears once with both live sources.

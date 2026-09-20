@@ -12,6 +12,8 @@ import {
   type ApiIssue
 } from "./api";
 import {
+  GENRE_OPTIONS,
+  genreLabel,
   toValidationInput,
   validateForm,
   type EditableLanguage,
@@ -197,6 +199,113 @@ function PreferenceEditor({
       <button type="button" className="secondary-button add-button" onClick={addItem} disabled={items.length >= max}>
         <span aria-hidden="true">＋</span> {tr(locale, singular === "artist" ? "addArtist" : "addGenre")}
       </button>
+    </section>
+  );
+}
+
+function GenreEditor({
+  locale,
+  items,
+  error,
+  onChange
+}: {
+  locale: Locale;
+  items: EditablePreference[];
+  error?: string;
+  onChange: (items: EditablePreference[]) => void;
+}) {
+  const max = 3;
+  const selectedNames = new Set(items.map((item) => item.name));
+
+  const toggleGenre = (name: string) => {
+    if (selectedNames.has(name)) {
+      onChange(items.filter((item) => item.name !== name));
+      return;
+    }
+    if (items.length < max) {
+      onChange([...items, { id: crypto.randomUUID(), name, weight: "like" }]);
+    }
+  };
+
+  return (
+    <section className="preference-section genre-section" aria-labelledby="genre-heading">
+      <div className="section-heading-row">
+        <div>
+          <p className="section-kicker">{tr(locale, "preferenceKicker")}</p>
+          <h2 id="genre-heading">{tr(locale, "genresHeading")}</h2>
+          <p className="section-hint">{tr(locale, "genresHint")}</p>
+        </div>
+        <span className="count-badge" aria-label={tr(locale, "countAria", { count: items.length, max })}>
+          {tr(locale, "count", { count: items.length, max })}
+        </span>
+      </div>
+
+      <fieldset className="genre-pool" aria-describedby={error ? "genre-error" : undefined}>
+        <legend className="sr-only">{tr(locale, "genrePoolLegend")}</legend>
+        {GENRE_OPTIONS.map((option) => {
+          const selected = selectedNames.has(option.value);
+          return (
+            <button
+              type="button"
+              className={selected ? "genre-chip is-selected" : "genre-chip"}
+              key={option.value}
+              aria-pressed={selected}
+              disabled={!selected && items.length >= max}
+              onClick={() => toggleGenre(option.value)}
+            >
+              <span>{genreLabel(option.value, locale)}</span>
+              {locale === "zh" && <small>{option.value}</small>}
+            </button>
+          );
+        })}
+      </fieldset>
+
+      {items.length > 0 && (
+        <div className="selected-genres">
+          <p>{tr(locale, "selectedGenres")}</p>
+          <div className="preference-list">
+            {items.map((item) => {
+              const label = genreLabel(item.name, locale);
+              return (
+                <div className="preference-row selected-genre-row" key={item.id}>
+                  <span className="selected-genre-name">{label}</span>
+                  <label className="sr-only" htmlFor={`genre-weight-${item.id}`}>
+                    {tr(locale, "itemImportance", { name: label })}
+                  </label>
+                  <select
+                    id={`genre-weight-${item.id}`}
+                    value={item.weight}
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={error ? "genre-error" : undefined}
+                    onChange={(event) =>
+                      onChange(
+                        items.map((current) =>
+                          current.id === item.id
+                            ? { ...current, weight: event.target.value as ImportanceLevel }
+                            : current
+                        )
+                      )
+                    }
+                  >
+                    {weightValues.map((value) => (
+                      <option key={value} value={value}>{tr(locale, value)}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    onClick={() => onChange(items.filter((current) => current.id !== item.id))}
+                    aria-label={tr(locale, "deleteItem", { name: label })}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {error && <p className="field-error" id="genre-error">{error}</p>}
     </section>
   );
 }
@@ -689,8 +798,8 @@ export default function App() {
             </button>
           </div>
           <div className="hero-ornament" aria-hidden="true">
-            <span>90</span>
-            <small>{tr(locale, "daysAhead")}</small>
+            <span>3</span>
+            <small>{tr(locale, "monthsAhead")}</small>
           </div>
         </section>
 
@@ -715,13 +824,9 @@ export default function App() {
               onChange={(artists) => setForm((current) => ({ ...current, artists }))}
             />
 
-            <PreferenceEditor
+            <GenreEditor
               locale={locale}
-              heading={tr(locale, "genresHeading")}
-              hint={tr(locale, "genresHint")}
-              singular="genre"
               items={form.genres}
-              max={3}
               error={errors.genres}
               onChange={(genres) => setForm((current) => ({ ...current, genres }))}
             />
@@ -821,7 +926,7 @@ export default function App() {
 
             <div className="submit-panel">
               <div>
-                <strong>{tr(locale, "readyNinetyDays")}</strong>
+                <strong>{tr(locale, "readyThreeMonths")}</strong>
                 <p>
                   {tr(locale, "preferenceSummary", {
                     artists: form.artists.filter((item) => item.name.trim()).length,

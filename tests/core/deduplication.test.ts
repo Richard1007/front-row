@@ -58,7 +58,7 @@ describe("deduplicateEvents", () => {
         startDate: "2026-10-09T20:00:00-07:00",
         eventStatus: "EventScheduled",
         location: {
-          name: "Oakland Arena",
+          name: "Oakland Arena at Oakland",
           address: { addressLocality: "Oakland", addressRegion: "CA" },
           geo: { latitude: 37.7503, longitude: -122.2028 }
         },

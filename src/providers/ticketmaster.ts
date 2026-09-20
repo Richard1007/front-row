@@ -3,6 +3,8 @@ import type {
   ProviderCapability,
   ValidationInput,
 } from "../core/types";
+import { forecastEnd } from "../core/forecast.js";
+import { findArtistProfile } from "../data/artistProfiles.js";
 import type { EventProvider, ProviderDependencies } from "./types";
 import { ProviderRequestError, ProviderUnavailableError } from "./types";
 import {
@@ -11,7 +13,6 @@ import {
   coordinates,
   deduplicateProviderEvents,
   encodeGeohash,
-  forecastEnd,
   mapEventStatus,
   requestSignal,
   safeProviderUrl,
@@ -72,17 +73,26 @@ export class TicketmasterProvider implements EventProvider {
     }
 
     const now = this.now();
-    const artists = uniqueStrings(input.artists.map((artist) => artist.name));
+    const artistQueries = input.artists.map((artist) => {
+      const attractionId = findArtistProfile(artist.name, artist.canonicalId)
+        ?.providerIds?.ticketmaster;
+      return attractionId
+        ? { attractionId }
+        : { keyword: artist.name };
+    });
     // Exact artist queries protect recall. The final un-keyworded regional query
     // supplies discovery candidates for genre/language scoring.
-    const queries: Array<string | undefined> = [...artists, undefined];
+    const queries: Array<{ attractionId?: string; keyword?: string }> = [
+      ...artistQueries,
+      {},
+    ];
     const allEvents: NormalizedEvent[] = [];
     const errors: Error[] = [];
     let successfulQueries = 0;
 
     // Direct artist queries protect long-tail artists from a popularity-ranked
     // regional feed. Keep these serial to be conservative with provider quotas.
-    for (const [index, artist] of queries.entries()) {
+    for (const [index, query] of queries.entries()) {
       if (index > 0 && this.minRequestIntervalMs > 0) {
         await delay(this.minRequestIntervalMs);
       }
@@ -90,7 +100,7 @@ export class TicketmasterProvider implements EventProvider {
         apikey: this.apiKey,
         classificationName: "Music",
         startDateTime: ticketmasterDateTime(now),
-        endDateTime: ticketmasterDateTime(forecastEnd(now, input.forecastDays)),
+        endDateTime: ticketmasterDateTime(forecastEnd(now, input.forecastMonths)),
         geoPoint: encodeGeohash(input.origin),
         radius: String(candidateRadiusMiles(input.maxTravelMinutes)),
         unit: "miles",
@@ -101,7 +111,8 @@ export class TicketmasterProvider implements EventProvider {
         includeTBD: "no",
         locale: "*",
       });
-      if (artist) params.set("keyword", artist);
+      if (query.attractionId) params.set("attractionId", query.attractionId);
+      else if (query.keyword) params.set("keyword", query.keyword);
 
       try {
         const response = await this.fetcher(`${this.baseUrl}/events.json?${params}`, {

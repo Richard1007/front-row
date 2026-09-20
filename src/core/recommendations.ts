@@ -1,6 +1,7 @@
 import { deduplicateEvents } from "./deduplication.js";
 import { enrichEvent, enrichValidationInput } from "./enrichment.js";
 import { estimateDrivingTravel } from "./geo.js";
+import { forecastEnd } from "./forecast.js";
 import type {
   ArtistSimilarityEvidence,
   ImportanceLevel,
@@ -301,11 +302,10 @@ function warningsFor(event: NormalizedEvent, input: ValidationInput): string[] {
   return warnings;
 }
 
-function eligibleByDate(event: NormalizedEvent, now: Date, forecastDays: number): boolean {
+function eligibleByDate(event: NormalizedEvent, now: Date, forecastMonths: number): boolean {
   const eventTime = Date.parse(event.startAt);
   if (!Number.isFinite(eventTime)) return false;
-  const windowEnd = now.getTime() + forecastDays * 24 * 60 * 60 * 1_000;
-  return eventTime >= now.getTime() && eventTime <= windowEnd;
+  return eventTime >= now.getTime() && eventTime <= forecastEnd(now, forecastMonths).getTime();
 }
 
 function rankEvent(
@@ -313,7 +313,7 @@ function rankEvent(
   event: NormalizedEvent,
   now: Date
 ): RankedEvent | undefined {
-  if (!eligibleByDate(event, now, input.forecastDays ?? 90)) return undefined;
+  if (!eligibleByDate(event, now, input.forecastMonths ?? 3)) return undefined;
   if (!event.venue.coordinates) return undefined;
 
   const exact = exactArtistMatch(event, input.artists);

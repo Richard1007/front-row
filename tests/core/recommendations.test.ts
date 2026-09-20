@@ -26,7 +26,7 @@ function input(overrides: Partial<ValidationInput> = {}): ValidationInput {
     languageMode: "weighted",
     origin: { label: "Oakland", latitude: 37.8044, longitude: -122.2712 },
     maxTravelMinutes: 120,
-    forecastDays: 90,
+    forecastMonths: 3,
     ...overrides
   };
 }
@@ -99,6 +99,28 @@ describe("buildRecommendations", () => {
     const result = buildRecommendations(input(), [byId, byAlias], { now: NOW });
     expect(result).toHaveLength(2);
     expect(result.every((item) => item.tier === "T1")).toBe(true);
+  });
+
+  it("includes an evening show on the final date of the three-month window", () => {
+    const sanJose = event("wang-san-jose", {
+      name: "Wang Leehom The Best Place II World Tour",
+      startAt: "2026-12-20T04:00:00.000Z",
+      venue: {
+        name: "SAP Center at San Jose",
+        city: "San Jose",
+        region: "CA",
+        coordinates: { latitude: 37.3328, longitude: -121.9012 }
+      },
+      performers: [{ name: "Wang Leehom", canonicalId: "K8vZ9173-Uf" }]
+    });
+
+    const [result] = buildRecommendations(input(), [sanJose], { now: NOW });
+
+    expect(result).toMatchObject({
+      canonicalKey: "wang-san-jose",
+      tier: "T1",
+      venue: { city: "San Jose" }
+    });
   });
 
   it("never treats a tribute show as an exact artist match", () => {

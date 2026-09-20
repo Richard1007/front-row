@@ -3,6 +3,8 @@ import type {
   ProviderCapability,
   ValidationInput,
 } from "../core/types";
+import { forecastEnd } from "../core/forecast.js";
+import { findArtistProfile } from "../data/artistProfiles.js";
 import type { EventProvider, ProviderDependencies } from "./types";
 import { ProviderRequestError, ProviderUnavailableError } from "./types";
 import {
@@ -10,7 +12,6 @@ import {
   canonicalEventKey,
   coordinates,
   deduplicateProviderEvents,
-  forecastEnd,
   mapEventStatus,
   requestSignal,
   safeProviderUrl,
@@ -68,7 +69,7 @@ export class JamBaseProvider implements EventProvider {
     const now = this.now();
     const commonParams: Record<string, string> = {
       eventDateFrom: isoDate(now),
-      eventDateTo: isoDate(forecastEnd(now, input.forecastDays)),
+      eventDateTo: isoDate(forecastEnd(now, input.forecastMonths)),
       geoLatitude: String(input.origin.latitude),
       geoLongitude: String(input.origin.longitude),
       geoRadiusAmount: String(candidateRadiusMiles(input.maxTravelMinutes)),
@@ -76,13 +77,15 @@ export class JamBaseProvider implements EventProvider {
       perPage: "100",
       page: "1",
     };
-    const artists = uniqueStrings(input.artists.map((artist) => artist.name));
-    const queries: URLSearchParams[] = [];
-    if (artists.length > 0) {
-      queries.push(
-        new URLSearchParams({ ...commonParams, artistName: artists.join("|") }),
+    const queries: URLSearchParams[] = input.artists.map((artist) => {
+      const artistId = findArtistProfile(artist.name, artist.canonicalId)
+        ?.providerIds?.jambase;
+      return new URLSearchParams(
+        artistId
+          ? { ...commonParams, artistId }
+          : { ...commonParams, artistName: artist.name },
       );
-    }
+    });
     queries.push(new URLSearchParams(commonParams));
 
     const allEvents: NormalizedEvent[] = [];

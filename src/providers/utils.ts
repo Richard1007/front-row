@@ -5,17 +5,6 @@ import type {
   ProviderId,
 } from "../core/types";
 
-export const DEFAULT_FORECAST_DAYS = 90;
-
-export function forecastDays(value?: number): number {
-  if (!Number.isFinite(value)) return DEFAULT_FORECAST_DAYS;
-  return Math.max(1, Math.min(DEFAULT_FORECAST_DAYS, Math.floor(value!)));
-}
-
-export function forecastEnd(now: Date, days?: number): Date {
-  return new Date(now.getTime() + forecastDays(days) * 24 * 60 * 60 * 1000);
-}
-
 /**
  * A provider radius is only a broad candidate filter. Route-time eligibility is
  * calculated later; 0.75 miles/minute gives a two-hour Bay Area search a

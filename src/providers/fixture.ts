@@ -7,11 +7,11 @@ import type {
   ProviderCapability,
   ValidationInput,
 } from "../core/types";
+import { forecastEnd } from "../core/forecast.js";
 import type { EventProvider, ProviderDependencies } from "./types";
 import {
   candidateRadiusMiles,
   canonicalEventKey,
-  forecastDays,
   haversineMiles,
   safeProviderUrl,
 } from "./utils";
@@ -55,11 +55,14 @@ export class FixtureProvider implements EventProvider {
 
   async fetchEvents(input: ValidationInput): Promise<NormalizedEvent[]> {
     const now = this.now();
-    const allowedDays = forecastDays(input.forecastDays);
+    const windowEnd = forecastEnd(now, input.forecastMonths).getTime();
     const radiusMiles = candidateRadiusMiles(input.maxTravelMinutes);
 
     return (fixtureTemplates as FixtureTemplate[])
-      .filter((template) => template.dayOffset <= allowedDays)
+      .filter(
+        (template) =>
+          now.getTime() + template.dayOffset * 86_400_000 <= windowEnd,
+      )
       .filter((template) =>
         haversineMiles(input.origin, {
           latitude: template.venue.latitude,

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { toValidationInput, validateForm, type ValidationFormState } from "../../src/client/form-utils";
+import {
+  GENRE_OPTIONS,
+  genreLabel,
+  toValidationInput,
+  validateForm,
+  type ValidationFormState
+} from "../../src/client/form-utils";
 
 const validState = (): ValidationFormState => ({
   artists: [{ id: "artist-1", name: " 王力宏 ", weight: "priority" }],
@@ -61,6 +67,24 @@ describe("validateForm", () => {
     expect(errors.maxTravelMinutes).toBeTruthy();
   });
 
+  it("rejects music styles that are not in the controlled list", () => {
+    const state = validState();
+    state.genres = [{ id: "genre-1", name: "Anything typed by a user", weight: "like" }];
+
+    expect(validateForm(state, "en").genres).toBe("Choose music styles from the provided list.");
+  });
+
+  it("limits the controlled music-style selection to three", () => {
+    const state = validState();
+    state.genres = GENRE_OPTIONS.slice(0, 4).map((option, index) => ({
+      id: `genre-${index}`,
+      name: option.value,
+      weight: "like"
+    }));
+
+    expect(validateForm(state, "en").genres).toBe("You can select up to 3 music styles.");
+  });
+
   it("rejects blank coordinates instead of treating them as zero", () => {
     const state = validState();
     state.latitude = "";
@@ -80,7 +104,8 @@ describe("toValidationInput", () => {
     expect(input.languages[0]).toEqual({ language: "普通话", percentage: 90 });
     expect(input.origin.latitude).toBe(37.8044);
     expect(input.maxTravelMinutes).toBe(120);
-    expect(input.forecastDays).toBe(90);
+    expect(input.forecastMonths).toBe(3);
+    expect(input.genres).toEqual([{ name: "R&B", weight: "like" }]);
   });
 
   it("omits language entries when language is unrestricted", () => {
@@ -98,5 +123,26 @@ describe("toValidationInput", () => {
 
     expect(input.origin.latitude).toBeNaN();
     expect(input.origin.longitude).toBeNaN();
+  });
+
+  it("only sends canonical English genre values to the backend", () => {
+    const state = validState();
+    state.genres = [
+      { id: "genre-1", name: "Mandopop", weight: "priority" },
+      { id: "genre-2", name: "华语流行", weight: "like" }
+    ];
+
+    expect(toValidationInput(state).genres).toEqual([{ name: "Mandopop", weight: "priority" }]);
+  });
+});
+
+describe("controlled genre taxonomy", () => {
+  it("uses unique canonical English values with localized labels", () => {
+    const values = GENRE_OPTIONS.map((option) => option.value);
+
+    expect(new Set(values).size).toBe(values.length);
+    expect(values).toContain("Mandopop");
+    expect(genreLabel("Mandopop", "en")).toBe("Mandopop");
+    expect(genreLabel("Mandopop", "zh")).toBe("华语流行");
   });
 });

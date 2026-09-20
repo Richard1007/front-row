@@ -1,4 +1,5 @@
 import { findArtistProfile, normalizeArtistName } from "../data/artistProfiles.js";
+import { haversineMiles } from "./geo.js";
 import type {
   EventSource,
   LanguageEvidence,
@@ -36,6 +37,15 @@ function sameVenue(left: NormalizedEvent, right: NormalizedEvent): boolean {
   const rightVenue = normalizedVenue(right.venue.name);
   const leftCity = normalizedVenue(left.venue.city);
   const rightCity = normalizedVenue(right.venue.city);
+
+  if (
+    left.venue.coordinates &&
+    right.venue.coordinates &&
+    haversineMiles(left.venue.coordinates, right.venue.coordinates) <= 0.5 &&
+    (!leftCity || !rightCity || leftCity === rightCity)
+  ) {
+    return true;
+  }
 
   if (
     leftVenue &&

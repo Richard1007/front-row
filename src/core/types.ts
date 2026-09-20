@@ -30,7 +30,7 @@ export interface ValidationInput {
   languageMode: "weighted" | "any";
   origin: Coordinates & { label: string };
   maxTravelMinutes: number;
-  forecastDays?: number;
+  forecastMonths?: number;
 }
 
 export interface Performer {

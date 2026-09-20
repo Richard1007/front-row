@@ -32,7 +32,7 @@ const input: ValidationInput = {
   languageMode: "weighted",
   origin: { label: "Oakland, CA", latitude: 37.8044, longitude: -122.2712 },
   maxTravelMinutes: 120,
-  forecastDays: 90,
+  forecastMonths: 3,
 };
 
 describe("provider contract", () => {
@@ -65,13 +65,15 @@ describe("provider contract", () => {
     expect(firstUrl.origin + firstUrl.pathname).toBe(
       "https://app.ticketmaster.com/discovery/v2/events.json",
     );
-    expect(firstUrl.searchParams.get("keyword")).toBe("王力宏");
+    expect(firstUrl.searchParams.get("attractionId")).toBe("K8vZ9173-Uf");
+    expect(firstUrl.searchParams.has("keyword")).toBe(false);
     expect(firstUrl.searchParams.get("classificationName")).toBe("Music");
     expect(firstUrl.searchParams.get("startDateTime")).toBe("2026-09-19T18:00:00Z");
-    expect(firstUrl.searchParams.get("endDateTime")).toBe("2026-12-18T18:00:00Z");
+    expect(firstUrl.searchParams.get("endDateTime")).toBe("2026-12-20T18:00:00Z");
     expect(firstUrl.searchParams.get("radius")).toBe("90");
     expect(firstUrl.searchParams.get("geoPoint")).toMatch(/^[0-9b-hjkmnp-z]{9}$/);
     const regionalUrl = new URL(String(fetcher.mock.calls[2]?.[0]));
+    expect(regionalUrl.searchParams.has("attractionId")).toBe(false);
     expect(regionalUrl.searchParams.has("keyword")).toBe(false);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
@@ -115,17 +117,21 @@ describe("provider contract", () => {
 
     const events = await provider.fetchEvents(input);
 
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(3);
     const [rawUrl, init] = fetcher.mock.calls[0] ?? [];
     const url = new URL(String(rawUrl));
     expect(url.origin + url.pathname).toBe("https://api.data.jambase.com/v3/events");
-    expect(url.searchParams.get("artistName")).toBe("王力宏|Bruno Mars");
+    expect(url.searchParams.get("artistId")).toBe("jambase:5911976");
+    expect(url.searchParams.has("artistName")).toBe(false);
     expect(url.searchParams.get("eventDateFrom")).toBe("2026-09-19");
-    expect(url.searchParams.get("eventDateTo")).toBe("2026-12-18");
+    expect(url.searchParams.get("eventDateTo")).toBe("2026-12-20");
     expect(url.searchParams.get("geoLatitude")).toBe("37.8044");
     expect(url.searchParams.get("geoLongitude")).toBe("-122.2712");
     expect(url.searchParams.get("geoRadiusAmount")).toBe("90");
-    const regionalUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
+    const secondArtistUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
+    expect(secondArtistUrl.searchParams.get("artistId")).toBe("jambase:276337");
+    const regionalUrl = new URL(String(fetcher.mock.calls[2]?.[0]));
+    expect(regionalUrl.searchParams.has("artistId")).toBe(false);
     expect(regionalUrl.searchParams.has("artistName")).toBe(false);
     const headers = new Headers(init?.headers);
     expect(headers.get("Authorization")).toBe("Bearer jbd_test_secret");
@@ -145,7 +151,7 @@ describe("provider contract", () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ error: "temporary" }, 503))
-      .mockResolvedValueOnce(jsonResponse(jambaseResponse));
+      .mockResolvedValue(jsonResponse(jambaseResponse));
     const provider = new JamBaseProvider({
       apiKey: "jbd_test_secret",
       fetch: fetcher,
@@ -154,7 +160,7 @@ describe("provider contract", () => {
 
     const events = await provider.fetchEvents(input);
 
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(3);
     expect(events).toHaveLength(1);
   });
 

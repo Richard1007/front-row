@@ -21,13 +21,13 @@ function validInput(): ValidationInput {
 }
 
 describe("validateInput", () => {
-  it("trims values and defaults the fixed 90-day window", () => {
+  it("trims values and defaults the fixed three-month window", () => {
     const input = validInput();
     input.artists[0]!.name = "  王力宏  ";
     const result = validateInput(input);
 
     expect(result.artists[0]?.name).toBe("王力宏");
-    expect(result.forecastDays).toBe(90);
+    expect(result.forecastMonths).toBe(3);
   });
 
   it("enforces artist and genre limits", () => {
@@ -44,6 +44,13 @@ describe("validateInput", () => {
       weight: "like" as const
     }));
     expect(safeValidateInput(tooManyGenres).success).toBe(false);
+  });
+
+  it("accepts only music styles from the controlled taxonomy", () => {
+    const input = validInput();
+    input.genres = [{ name: "A genre typed outside the pool", weight: "like" }];
+
+    expect(safeValidateInput(input).success).toBe(false);
   });
 
   it("requires weighted language percentages to total 100", () => {
@@ -75,8 +82,8 @@ describe("validateInput", () => {
     expect(safeValidateInput(input).success).toBe(false);
   });
 
-  it("rejects a non-90-day Milestone 0 window and invalid coordinates", () => {
-    expect(safeValidateInput({ ...validInput(), forecastDays: 30 }).success).toBe(false);
+  it("rejects a non-three-month Milestone 0 window and invalid coordinates", () => {
+    expect(safeValidateInput({ ...validInput(), forecastMonths: 1 }).success).toBe(false);
     expect(
       safeValidateInput({
         ...validInput(),
