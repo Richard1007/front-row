@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-import { normalizeLanguageTag } from "../data/artistProfiles.js";
+import { findArtistProfile } from "../data/artistProfiles.js";
 import { isGenreValue } from "../data/genres.js";
+import { isLanguageValue, normalizeLanguageValue } from "../data/languages.js";
 import type { ValidationInput } from "./types.js";
 
 const importanceSchema = z.enum(["priority", "like", "occasional"]);
@@ -22,7 +23,13 @@ const genrePreferenceSchema = weightedPreferenceSchema.extend({
 });
 
 const languagePreferenceSchema = z.object({
-  language: z.string().trim().min(1, "语言不能为空").max(40).transform(normalizeLanguageTag),
+  language: z
+    .string()
+    .trim()
+    .min(1, "语言不能为空")
+    .max(40)
+    .transform(normalizeLanguageValue)
+    .refine(isLanguageValue, "请选择提供的语言"),
   percentage: z.number().finite().min(0).max(100)
 });
 
@@ -34,30 +41,40 @@ function containsDuplicates(values: string[]): boolean {
   return new Set(values.map(normalizedName)).size !== values.length;
 }
 
+function artistIdentityKey(artist: z.infer<typeof weightedPreferenceSchema>): string {
+  const profile = findArtistProfile(artist.name, artist.canonicalId);
+  if (profile) return `profile:${profile.canonicalId}`;
+  if (artist.canonicalId) return `canonical:${normalizedName(artist.canonicalId)}`;
+  return `name:${normalizedName(artist.name)}`;
+}
+
 export const validationInputSchema = z
   .object({
-    artists: z.array(weightedPreferenceSchema).max(10, "最多选择 10 位艺人"),
+    artists: z
+      .array(weightedPreferenceSchema)
+      .min(1, "请至少选择 1 位艺人")
+      .max(10, "最多选择 10 位艺人"),
     genres: z.array(genrePreferenceSchema).max(3, "最多选择 3 种风格"),
-    languages: z.array(languagePreferenceSchema).max(20),
+    languages: z.array(languagePreferenceSchema).max(3, "最多选择 3 种语言"),
     languageMode: z.enum(["weighted", "any"]),
     origin: z.object({
       label: z.string().trim().min(1, "出发地点不能为空").max(160),
       latitude: z.number().finite().min(-90).max(90),
       longitude: z.number().finite().min(-180).max(180)
     }),
-    maxTravelMinutes: z.number().int().min(1).max(720),
-    forecastMonths: z.number().int().default(3)
+    maxTravelMinutes: z.number().int().min(15).max(360),
+    forecastMonths: z.number().int().default(4)
   })
   .superRefine((value, context) => {
-    if (value.forecastMonths !== 3) {
+    if (value.forecastMonths !== 4) {
       context.addIssue({
         code: "custom",
         path: ["forecastMonths"],
-        message: "Milestone 0 固定搜索未来三个月"
+        message: "Milestone 0 固定搜索未来四个月"
       });
     }
 
-    if (containsDuplicates(value.artists.map((artist) => artist.name))) {
+    if (containsDuplicates(value.artists.map(artistIdentityKey))) {
       context.addIssue({
         code: "custom",
         path: ["artists"],

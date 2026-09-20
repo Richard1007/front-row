@@ -1,0 +1,22 @@
+{
+  "title": "GeoNames cities15000",
+  "source": "https://download.geonames.org/export/dump/cities15000.zip",
+  "adminSource": "https://download.geonames.org/export/dump/admin1CodesASCII.txt",
+  "license": "CC BY 4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+  "attribution": "GeoNames (https://www.geonames.org/)",
+  "generatedAt": "2026-09-20T07:21:14.370Z",
+  "cityCount": 34146,
+  "aliasLimitPerCity": 10,
+  "rowSchema": [
+    "geonameId",
+    "name",
+    "asciiName",
+    "aliases",
+    "countryCode",
+    "adminName",
+    "latitude",
+    "longitude",
+    "population"
+  ]
+}

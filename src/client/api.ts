@@ -5,6 +5,17 @@ export interface ApiIssue {
   message: string;
 }
 
+export interface LocationOption {
+  id: string;
+  label: string;
+  city: string;
+  region?: string;
+  countryCode: string;
+  latitude: number;
+  longitude: number;
+  source: "geonames";
+}
+
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly issues: ApiIssue[];
@@ -46,6 +57,19 @@ export async function getProviderCapabilities(): Promise<ProviderCapability[]> {
   const response = await fetch("/api/providers", { headers: { Accept: "application/json" } });
   const body = await readJson<ProviderCapability[] | { providers: ProviderCapability[] }>(response);
   return Array.isArray(body) ? body : body.providers;
+}
+
+export async function searchLocations(
+  query: string,
+  signal?: AbortSignal
+): Promise<LocationOption[]> {
+  const params = new URLSearchParams({ q: query, limit: "6" });
+  const response = await fetch(`/api/locations?${params}`, {
+    headers: { Accept: "application/json" },
+    signal
+  });
+  const body = await readJson<{ locations: LocationOption[] }>(response);
+  return body.locations;
 }
 
 export async function createValidationRun(input: ValidationInput): Promise<ValidationResult> {

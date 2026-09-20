@@ -13,6 +13,7 @@ import {
   coordinates,
   deduplicateProviderEvents,
   mapEventStatus,
+  preferredArtistQueryName,
   requestSignal,
   safeProviderUrl,
   uniqueStrings,
@@ -77,13 +78,18 @@ export class JamBaseProvider implements EventProvider {
       perPage: "100",
       page: "1",
     };
-    const queries: URLSearchParams[] = input.artists.map((artist) => {
-      const artistId = findArtistProfile(artist.name, artist.canonicalId)
-        ?.providerIds?.jambase;
+    const directArtists = [
+      ...input.artists,
+      ...(input.discoveryArtists ?? []).slice(0, 12)
+    ];
+    const queries: URLSearchParams[] = directArtists.map((artist) => {
+      const profile = findArtistProfile(artist.name, artist.canonicalId) ??
+        artist.aliases?.map((alias) => findArtistProfile(alias)).find(Boolean);
+      const artistId = profile?.providerIds?.jambase;
       return new URLSearchParams(
         artistId
           ? { ...commonParams, artistId }
-          : { ...commonParams, artistName: artist.name },
+          : { ...commonParams, artistName: preferredArtistQueryName(artist) },
       );
     });
     queries.push(new URLSearchParams(commonParams));

@@ -9,6 +9,8 @@ import {
   ApiRequestError,
   createValidationRun,
   getProviderCapabilities,
+  searchLocations,
+  type LocationOption,
   type ApiIssue
 } from "./api";
 import {
@@ -21,6 +23,7 @@ import {
   type FormErrors,
   type ValidationFormState
 } from "./form-utils";
+import { LANGUAGE_OPTIONS, languageLabel } from "../data/languages";
 import {
   readStoredLocale,
   storeLocale,
@@ -47,11 +50,10 @@ function createInitialState(locale: Locale): ValidationFormState {
   return {
     artists: [{ id: crypto.randomUUID(), name: "", weight: "priority" }],
     genres: [],
-    languages: [
-      { id: crypto.randomUUID(), language: locale === "zh" ? "普通话" : "Mandarin", percentage: "70" },
-      { id: crypto.randomUUID(), language: locale === "zh" ? "英语" : "English", percentage: "30" }
-    ],
-    languageMode: "weighted",
+    languages: [],
+    languageMode: "any",
+    locationMode: "city",
+    selectedCityId: "",
     originLabel: "",
     latitude: "",
     longitude: "",
@@ -67,11 +69,13 @@ function createOaklandExample(locale: Locale): ValidationFormState {
       { id: crypto.randomUUID(), name: "R&B", weight: "like" }
     ],
     languages: [
-      { id: crypto.randomUUID(), language: locale === "zh" ? "普通话" : "Mandarin", percentage: "70" },
-      { id: crypto.randomUUID(), language: locale === "zh" ? "英语" : "English", percentage: "30" }
+      { id: crypto.randomUUID(), language: "cmn" },
+      { id: crypto.randomUUID(), language: "en" }
     ],
     languageMode: "weighted",
-    originLabel: "Oakland",
+    locationMode: "city",
+    selectedCityId: "geonames:5378538",
+    originLabel: "Oakland, California, United States",
     latitude: "37.8044",
     longitude: "-122.2712",
     maxTravelMinutes: "120"
@@ -260,51 +264,6 @@ function GenreEditor({
         })}
       </fieldset>
 
-      {items.length > 0 && (
-        <div className="selected-genres">
-          <p>{tr(locale, "selectedGenres")}</p>
-          <div className="preference-list">
-            {items.map((item) => {
-              const label = genreLabel(item.name, locale);
-              return (
-                <div className="preference-row selected-genre-row" key={item.id}>
-                  <span className="selected-genre-name">{label}</span>
-                  <label className="sr-only" htmlFor={`genre-weight-${item.id}`}>
-                    {tr(locale, "itemImportance", { name: label })}
-                  </label>
-                  <select
-                    id={`genre-weight-${item.id}`}
-                    value={item.weight}
-                    aria-invalid={Boolean(error)}
-                    aria-describedby={error ? "genre-error" : undefined}
-                    onChange={(event) =>
-                      onChange(
-                        items.map((current) =>
-                          current.id === item.id
-                            ? { ...current, weight: event.target.value as ImportanceLevel }
-                            : current
-                        )
-                      )
-                    }
-                  >
-                    {weightValues.map((value) => (
-                      <option key={value} value={value}>{tr(locale, value)}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    onClick={() => onChange(items.filter((current) => current.id !== item.id))}
-                    aria-label={tr(locale, "deleteItem", { name: label })}
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
       {error && <p className="field-error" id="genre-error">{error}</p>}
     </section>
   );
@@ -325,7 +284,20 @@ function LanguageEditor({
   onModeChange: (mode: ValidationFormState["languageMode"]) => void;
   onChange: (items: EditableLanguage[]) => void;
 }) {
-  const total = items.reduce((sum, item) => sum + (Number(item.percentage) || 0), 0);
+  const max = 3;
+  const selected = new Set(items.map((item) => item.language));
+
+  const toggleLanguage = (language: string) => {
+    if (selected.has(language)) {
+      const next = items.filter((item) => item.language !== language);
+      onChange(next);
+      if (next.length === 0) onModeChange("any");
+      return;
+    }
+    if (items.length >= max) return;
+    onModeChange("weighted");
+    onChange([...items, { id: crypto.randomUUID(), language }]);
+  };
 
   return (
     <section className="preference-section language-section" aria-labelledby="language-heading">
@@ -335,83 +307,42 @@ function LanguageEditor({
           <h2 id="language-heading">{tr(locale, "languageHeading")}</h2>
           <p className="section-hint">{tr(locale, "languageHint")}</p>
         </div>
-        {mode === "weighted" && (
-          <span className={`count-badge ${total === 100 ? "is-complete" : "is-warning"}`} aria-live="polite">
-            {tr(locale, "total", { total })}
-          </span>
-        )}
+        <span className="count-badge" aria-live="polite">
+          {tr(locale, "count", { count: items.length, max })}
+        </span>
       </div>
 
-      <fieldset className="segmented-control">
+      <fieldset className="genre-pool language-pool" aria-describedby={error ? "languages-error" : undefined}>
         <legend className="sr-only">{tr(locale, "languageMode")}</legend>
-        <label className={mode === "weighted" ? "is-selected" : ""}>
-          <input type="radio" name="language-mode" checked={mode === "weighted"} onChange={() => onModeChange("weighted")} />
-          {tr(locale, "setRatio")}
-        </label>
-        <label className={mode === "any" ? "is-selected" : ""}>
-          <input type="radio" name="language-mode" checked={mode === "any"} onChange={() => onModeChange("any")} />
+        <button
+          type="button"
+          className={mode === "any" ? "genre-chip is-selected" : "genre-chip"}
+          aria-pressed={mode === "any"}
+          onClick={() => {
+            onModeChange("any");
+            onChange([]);
+          }}
+        >
           {tr(locale, "anyLanguage")}
-        </label>
+        </button>
+        {LANGUAGE_OPTIONS.map((option) => {
+          const isSelected = selected.has(option.value);
+          return (
+            <button
+              type="button"
+              className={isSelected ? "genre-chip is-selected" : "genre-chip"}
+              key={option.value}
+              aria-pressed={isSelected}
+              disabled={!isSelected && items.length >= max}
+              onClick={() => toggleLanguage(option.value)}
+            >
+              <span>{languageLabel(option.value, locale)}</span>
+              {locale === "zh" && <small>{option.en}</small>}
+            </button>
+          );
+        })}
       </fieldset>
-
-      {mode === "weighted" && (
-        <>
-          <div className="preference-list">
-            {items.map((item, index) => (
-              <div className="preference-row language-row" key={item.id}>
-                <label className="sr-only" htmlFor={`language-name-${item.id}`}>
-                  {tr(locale, "itemName", { item: tr(locale, "language"), index: index + 1 })}
-                </label>
-                <input
-                  id={`language-name-${item.id}`}
-                  value={item.language}
-                  onChange={(event) =>
-                    onChange(items.map((current) => current.id === item.id ? { ...current, language: event.target.value } : current))
-                  }
-                  placeholder={tr(locale, "languagePlaceholder")}
-                  aria-invalid={Boolean(error)}
-                  aria-describedby={error ? "languages-error" : undefined}
-                />
-                <label className="percentage-input" htmlFor={`language-percentage-${item.id}`}>
-                  <span className="sr-only">
-                    {tr(locale, "languageRatio", { language: item.language || `${tr(locale, "language")} ${index + 1}` })}
-                  </span>
-                  <input
-                    id={`language-percentage-${item.id}`}
-                    type="number"
-                    min="0"
-                    max="100"
-                    inputMode="decimal"
-                    value={item.percentage}
-                    aria-invalid={Boolean(error)}
-                    onChange={(event) =>
-                      onChange(items.map((current) => current.id === item.id ? { ...current, percentage: event.target.value } : current))
-                    }
-                    aria-describedby={error ? "languages-error" : undefined}
-                  />
-                  <span aria-hidden="true">%</span>
-                </label>
-                <button
-                  type="button"
-                  className="icon-button"
-                  onClick={() => onChange(items.filter((current) => current.id !== item.id))}
-                  aria-label={tr(locale, "deleteLanguage", { language: item.language || `${tr(locale, "language")} ${index + 1}` })}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-          {error && <p className="field-error" id="languages-error">{error}</p>}
-          <button
-            type="button"
-            className="secondary-button add-button"
-            onClick={() => onChange([...items, { id: crypto.randomUUID(), language: "", percentage: "0" }])}
-          >
-            <span aria-hidden="true">＋</span> {tr(locale, "addLanguage")}
-          </button>
-        </>
-      )}
+      {error && <p className="field-error" id="languages-error">{error}</p>}
     </section>
   );
 }
@@ -427,15 +358,14 @@ function ProviderPanel({
   loading: boolean;
   error?: string;
 }) {
+  const liveCount = providers.filter((provider) => provider.mode === "live").length;
   return (
-    <aside className="provider-panel" aria-labelledby="provider-heading">
-      <div className="provider-heading-row">
-        <div>
-          <p className="section-kicker">{tr(locale, "dataSourcesKicker")}</p>
-          <h2 id="provider-heading">{tr(locale, "connectionStatus")}</h2>
-        </div>
+    <details className="provider-panel">
+      <summary id="provider-heading">
+        <span className="provider-summary-status" aria-hidden="true" />
+        <span>{tr(locale, "sourceSummary", { count: liveCount })}</span>
         {loading && <span className="tiny-loader" aria-label={tr(locale, "checkingSources")} />}
-      </div>
+      </summary>
       <div className="provider-list">
         {providers.map((provider) => (
           <div className="provider-item" key={provider.id}>
@@ -450,7 +380,7 @@ function ProviderPanel({
       </div>
       {error && <p className="provider-error">{tr(locale, "providerReadError", { error: translateServerText(locale, error) })}</p>}
       <p className="provider-note">{tr(locale, "providerNote")}</p>
-    </aside>
+    </details>
   );
 }
 
@@ -508,9 +438,9 @@ function formErrorsFromApiIssues(issues: ApiIssue[], locale: Locale): FormErrors
   const next: FormErrors = {};
   for (const issue of issues) {
     const field = issue.path.startsWith("origin.latitude")
-      ? "latitude"
+      ? "originLabel"
       : issue.path.startsWith("origin.longitude")
-        ? "longitude"
+        ? "originLabel"
         : issue.path.startsWith("origin.label")
           ? "originLabel"
           : issue.path.split(".")[0];
@@ -647,8 +577,13 @@ export default function App() {
   });
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string>();
+  const [cityOptions, setCityOptions] = useState<LocationOption[]>([]);
+  const [cityLoading, setCityLoading] = useState(false);
+  const [cityOpen, setCityOpen] = useState(false);
+  const [cityHighlight, setCityHighlight] = useState(0);
   const resultsRef = useRef<HTMLElement>(null);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
+  const locationRequestRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -670,11 +605,6 @@ export default function App() {
     document.title = tr(locale, "pageTitle");
   }, [locale]);
 
-  const languageTotal = useMemo(
-    () => form.languages.reduce((sum, language) => sum + (Number(language.percentage) || 0), 0),
-    [form.languages]
-  );
-
   const errorMessages = useMemo(() => {
     const messages = [
       ...Object.values(errors).filter((message): message is string => Boolean(message)),
@@ -683,6 +613,40 @@ export default function App() {
     if (messages.length === 0 && submitError) messages.push(translateServerText(locale, submitError));
     return [...new Set(messages)];
   }, [errors, locale, serverIssues, submitError]);
+
+  useEffect(() => {
+    if (
+      form.locationMode !== "city" ||
+      form.selectedCityId ||
+      form.originLabel.trim().length < 2
+    ) {
+      setCityOptions([]);
+      setCityLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setCityLoading(true);
+      searchLocations(form.originLabel.trim(), controller.signal)
+        .then((locations) => {
+          setCityOptions(locations);
+          setCityHighlight(0);
+          setCityOpen(true);
+        })
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          setCityOptions([]);
+          setLocationMessage(tr(locale, "citySearchFailed"));
+        })
+        .finally(() => setCityLoading(false));
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [form.locationMode, form.originLabel, form.selectedCityId, locale]);
 
   const changeLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
@@ -710,16 +674,24 @@ export default function App() {
     }
     setLocationLoading(true);
     setLocationMessage(undefined);
+    const requestId = ++locationRequestRef.current;
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         setForm((current) => ({
-          ...current,
-          originLabel: current.originLabel || (locale === "zh" ? "我的当前位置" : "My current location"),
-          latitude: coords.latitude.toFixed(6),
-          longitude: coords.longitude.toFixed(6)
+          ...(current.locationMode === "current" && locationRequestRef.current === requestId
+            ? {
+                ...current,
+                selectedCityId: "",
+                originLabel: locale === "zh" ? "我的当前位置" : "My current location",
+                latitude: coords.latitude.toFixed(3),
+                longitude: coords.longitude.toFixed(3)
+              }
+            : current)
         }));
         setLocationLoading(false);
-        setLocationMessage(tr(locale, "currentLocationLoaded"));
+        if (locationRequestRef.current === requestId) {
+          setLocationMessage(tr(locale, "currentLocationLoaded"));
+        }
       },
       () => {
         setLocationLoading(false);
@@ -727,6 +699,49 @@ export default function App() {
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
     );
+  };
+
+  const setLocationMode = (locationMode: ValidationFormState["locationMode"]) => {
+    locationRequestRef.current += 1;
+    setLocationLoading(false);
+    setLocationMessage(undefined);
+    setCityOpen(false);
+    setForm((current) => ({
+      ...current,
+      locationMode,
+      selectedCityId: "",
+      originLabel: "",
+      latitude: "",
+      longitude: ""
+    }));
+  };
+
+  const selectCity = (city: LocationOption) => {
+    setForm((current) => ({
+      ...current,
+      locationMode: "city",
+      selectedCityId: city.id,
+      originLabel: city.label,
+      latitude: String(city.latitude),
+      longitude: String(city.longitude)
+    }));
+    setCityOpen(false);
+    setCityOptions([]);
+    setLocationMessage(tr(locale, "citySelected"));
+    setErrors((current) => ({ ...current, originLabel: undefined, latitude: undefined, longitude: undefined }));
+  };
+
+  const updateCityQuery = (value: string) => {
+    setForm((current) => ({
+      ...current,
+      locationMode: "city",
+      selectedCityId: "",
+      originLabel: value,
+      latitude: "",
+      longitude: ""
+    }));
+    setLocationMessage(undefined);
+    setCityOpen(value.trim().length >= 2);
   };
 
   const submit = async (event: React.FormEvent) => {
@@ -798,7 +813,7 @@ export default function App() {
             </button>
           </div>
           <div className="hero-ornament" aria-hidden="true">
-            <span>3</span>
+            <span>4</span>
             <small>{tr(locale, "monthsAhead")}</small>
           </div>
         </section>
@@ -849,91 +864,128 @@ export default function App() {
                 </div>
               </div>
 
-              <button type="button" className="location-button" onClick={useCurrentLocation} disabled={locationLoading}>
-                <span className="location-icon" aria-hidden="true">⌖</span>
-                {tr(locale, locationLoading ? "readingLocation" : "useCurrentLocation")}
-              </button>
+              <fieldset className="segmented-control location-mode">
+                <legend className="sr-only">{tr(locale, "locationMode")}</legend>
+                <label className={form.locationMode === "city" ? "is-selected" : ""}>
+                  <input
+                    type="radio"
+                    name="location-mode"
+                    checked={form.locationMode === "city"}
+                    onChange={() => setLocationMode("city")}
+                  />
+                  {tr(locale, "chooseCity")}
+                </label>
+                <label className={form.locationMode === "current" ? "is-selected" : ""}>
+                  <input
+                    type="radio"
+                    name="location-mode"
+                    checked={form.locationMode === "current"}
+                    onChange={() => setLocationMode("current")}
+                  />
+                  {tr(locale, "currentLocation")}
+                </label>
+              </fieldset>
+
+              {form.locationMode === "current" ? (
+                <button type="button" className="location-button" onClick={useCurrentLocation} disabled={locationLoading}>
+                  <span className="location-icon" aria-hidden="true">⌖</span>
+                  {tr(locale, locationLoading ? "readingLocation" : "useCurrentLocation")}
+                </button>
+              ) : (
+                <div className="field-stack city-combobox">
+                  <label htmlFor="city-search">{tr(locale, "cityLabel")}</label>
+                  <div className="combobox-shell">
+                    <input
+                      id="city-search"
+                      role="combobox"
+                      value={form.originLabel}
+                      placeholder={tr(locale, "cityPlaceholder")}
+                      autoComplete="off"
+                      aria-autocomplete="list"
+                      aria-expanded={cityOpen}
+                      aria-controls="city-options"
+                      aria-activedescendant={cityOpen && cityOptions[cityHighlight] ? `city-option-${cityOptions[cityHighlight].id}` : undefined}
+                      aria-invalid={Boolean(errors.originLabel)}
+                      aria-describedby={errors.originLabel ? "origin-label-error" : "city-privacy-note"}
+                      onFocus={() => setCityOpen(cityOptions.length > 0)}
+                      onBlur={() => window.setTimeout(() => setCityOpen(false), 100)}
+                      onChange={(event) => updateCityQuery(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (!cityOpen || cityOptions.length === 0) return;
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setCityHighlight((current) => (current + 1) % cityOptions.length);
+                        } else if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setCityHighlight((current) => (current - 1 + cityOptions.length) % cityOptions.length);
+                        } else if (event.key === "Enter") {
+                          event.preventDefault();
+                          const city = cityOptions[cityHighlight];
+                          if (city) selectCity(city);
+                        } else if (event.key === "Escape") {
+                          setCityOpen(false);
+                        }
+                      }}
+                    />
+                    {cityLoading && <span className="tiny-loader city-loader" aria-label={tr(locale, "searchingCities")} />}
+                  </div>
+                  {cityOpen && (
+                    <ul className="city-options" id="city-options" role="listbox">
+                      {cityOptions.length > 0 ? cityOptions.map((city, index) => (
+                        <li
+                          id={`city-option-${city.id}`}
+                          key={city.id}
+                          role="option"
+                          aria-selected={index === cityHighlight}
+                          className={index === cityHighlight ? "is-highlighted" : ""}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectCity(city)}
+                        >
+                          {city.label}
+                        </li>
+                      )) : !cityLoading && form.originLabel.trim().length >= 2 ? (
+                        <li className="city-empty">{tr(locale, "noCities")}</li>
+                      ) : null}
+                    </ul>
+                  )}
+                  <p className="field-note" id="city-privacy-note">{tr(locale, "cityPrivacy")}</p>
+                </div>
+              )}
               {locationMessage && <p className="location-message" role="status">{locationMessage}</p>}
-
-              <div className="field-stack">
-                <label htmlFor="origin-label">{tr(locale, "originLabel")}</label>
-                <input
-                  id="origin-label"
-                  value={form.originLabel}
-                  placeholder={tr(locale, "originPlaceholder")}
-                  onChange={(event) => setForm((current) => ({ ...current, originLabel: event.target.value }))}
-                  aria-invalid={Boolean(errors.originLabel)}
-                  aria-describedby={errors.originLabel ? "origin-label-error" : undefined}
-                />
-                {errors.originLabel && <p className="field-error" id="origin-label-error">{errors.originLabel}</p>}
-              </div>
-
-              <div className="coordinate-grid">
-                <div className="field-stack">
-                  <label htmlFor="latitude">{tr(locale, "latitude")}</label>
-                  <input
-                    id="latitude"
-                    type="number"
-                    step="any"
-                    inputMode="decimal"
-                    value={form.latitude}
-                    placeholder="37.8044"
-                    onChange={(event) => setForm((current) => ({ ...current, latitude: event.target.value }))}
-                    aria-invalid={Boolean(errors.latitude)}
-                    aria-describedby={errors.latitude ? "latitude-error" : undefined}
-                  />
-                  {errors.latitude && <p className="field-error" id="latitude-error">{errors.latitude}</p>}
-                </div>
-                <div className="field-stack">
-                  <label htmlFor="longitude">{tr(locale, "longitude")}</label>
-                  <input
-                    id="longitude"
-                    type="number"
-                    step="any"
-                    inputMode="decimal"
-                    value={form.longitude}
-                    placeholder="-122.2712"
-                    onChange={(event) => setForm((current) => ({ ...current, longitude: event.target.value }))}
-                    aria-invalid={Boolean(errors.longitude)}
-                    aria-describedby={errors.longitude ? "longitude-error" : undefined}
-                  />
-                  {errors.longitude && <p className="field-error" id="longitude-error">{errors.longitude}</p>}
-                </div>
-              </div>
+              {errors.originLabel && <p className="field-error" id="origin-label-error">{errors.originLabel}</p>}
 
               <div className="field-stack travel-field">
                 <div className="label-row">
                   <label htmlFor="travel-time">{tr(locale, "maxTravel")}</label>
-                  <output htmlFor="travel-time">{tr(locale, "minutes", { minutes: form.maxTravelMinutes })}</output>
+                  <output htmlFor="travel-time">{tr(locale, "hours", { hours: Number(form.maxTravelMinutes) / 60 })}</output>
                 </div>
-                <input
+                <select
                   id="travel-time"
-                  type="range"
-                  min="15"
-                  max="360"
-                  step="15"
                   value={form.maxTravelMinutes}
                   onChange={(event) => setForm((current) => ({ ...current, maxTravelMinutes: event.target.value }))}
                   aria-invalid={Boolean(errors.maxTravelMinutes)}
-                  aria-describedby={errors.maxTravelMinutes ? "travel-time-error" : "travel-time-hint"}
-                />
-                <div className="range-labels" id="travel-time-hint">
-                  <span>{tr(locale, "minutes", { minutes: 15 })}</span><span>{tr(locale, "sixHours")}</span>
-                </div>
+                  aria-describedby={errors.maxTravelMinutes ? "travel-time-error" : undefined}
+                >
+                  {[60, 90, 120, 180, 240, 360].map((minutes) => (
+                    <option value={minutes} key={minutes}>
+                      {tr(locale, "hours", { hours: minutes / 60 })}
+                    </option>
+                  ))}
+                </select>
                 {errors.maxTravelMinutes && <p className="field-error" id="travel-time-error">{errors.maxTravelMinutes}</p>}
               </div>
             </section>
 
             <div className="submit-panel">
               <div>
-                <strong>{tr(locale, "readyThreeMonths")}</strong>
+                <strong>{tr(locale, "readyFourMonths")}</strong>
                 <p>
                   {tr(locale, "preferenceSummary", {
                     artists: form.artists.filter((item) => item.name.trim()).length,
                     genres: form.genres.filter((item) => item.name.trim()).length,
                     language: form.languageMode === "any"
                       ? tr(locale, "anyLanguage")
-                      : tr(locale, "languageTotalSummary", { total: languageTotal })
+                      : tr(locale, "languageCountSummary", { count: form.languages.length })
                   })}
                 </p>
               </div>
@@ -980,12 +1032,6 @@ export default function App() {
           {result && !submitting && (
             <>
               <DataModeBanner locale={locale} mode={displayedDataMode(result)} />
-              <div className="coverage-strip" aria-label={tr(locale, "coverageLabel")}>
-                <span><strong>{result.coverage.rawEvents}</strong> {tr(locale, "rawEvents")}</span>
-                <span><strong>{result.coverage.deduplicatedEvents}</strong> {tr(locale, "deduplicated")}</span>
-                <span><strong>{result.coverage.eligibleEvents}</strong> {tr(locale, "selectedRecommendations")}</span>
-                <span><strong>{result.recommendations.length}</strong> {tr(locale, "finalRecommendations")}</span>
-              </div>
 
               {result.recommendations.length === 0 ? (
                 <div className="empty-state result-empty">
@@ -1010,6 +1056,23 @@ export default function App() {
               <details className="diagnostics">
                 <summary>{tr(locale, "diagnostics")}</summary>
                 <div>
+                  <p>
+                    <strong>{tr(locale, "coverageLabel")}</strong>
+                    <span>
+                      {result.coverage.rawEvents} {tr(locale, "rawEvents")}
+                      {" · "}{result.coverage.deduplicatedEvents} {tr(locale, "deduplicated")}
+                      {" · "}{result.coverage.eligibleEvents} {tr(locale, "selectedRecommendations")}
+                    </span>
+                  </p>
+                  {result.discovery && (
+                    <p>
+                      <strong>{tr(locale, "relatedArtistSearch")}</strong>
+                      <span>{tr(locale, "relatedArtistCount", { count: result.discovery.candidateArtists.length })}</span>
+                      {result.discovery.candidateArtists.length > 0 && (
+                        <small>{result.discovery.candidateArtists.join(" · ")}</small>
+                      )}
+                    </p>
+                  )}
                   {result.diagnostics.map((diagnostic) => (
                     <p key={diagnostic.provider}>
                       <strong>{providerName(locale, diagnostic.provider)}</strong>
@@ -1030,6 +1093,9 @@ export default function App() {
       <footer>
         <span>{tr(locale, "footerProduct")}</span>
         <span>{tr(locale, "footerPrivacy")}</span>
+        <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">
+          {tr(locale, "footerCityData")}
+        </a>
       </footer>
     </div>
   );

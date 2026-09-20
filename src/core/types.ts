@@ -25,6 +25,8 @@ export interface LanguagePreference {
 
 export interface ValidationInput {
   artists: WeightedPreference[];
+  /** Server-side sourced related artists used only for candidate retrieval. */
+  discoveryArtists?: ArtistExpansionCandidate[];
   genres: WeightedPreference[];
   languages: LanguagePreference[];
   languageMode: "weighted" | "any";
@@ -46,7 +48,24 @@ export interface ArtistSimilarityEvidence {
   preferenceCanonicalId?: string;
   score: number;
   confidence: number;
-  source: "manual" | "provider" | "genre";
+  source: "manual" | "provider" | "genre" | "listenbrainz";
+}
+
+/** A related artist backed by an external discovery source, not an invented event. */
+export interface ArtistExpansionCandidate {
+  name: string;
+  aliases?: string[];
+  canonicalId: string;
+  musicBrainzId: string;
+  evidence: ArtistExpansionEvidence[];
+}
+
+export interface ArtistExpansionEvidence {
+  source: "listenbrainz";
+  seedName: string;
+  seedCanonicalId?: string;
+  seedWeight: ImportanceLevel;
+  rank: number;
 }
 
 export interface EventSource {
@@ -122,6 +141,11 @@ export interface ValidationResult {
   dataMode: "live" | "fixture" | "mixed" | "unavailable";
   recommendations: RankedEvent[];
   diagnostics: ProviderDiagnostic[];
+  discovery?: {
+    source: "musicbrainz-listenbrainz";
+    candidateArtists: string[];
+    unresolvedSeeds: string[];
+  };
   coverage: {
     rawEvents: number;
     deduplicatedEvents: number;

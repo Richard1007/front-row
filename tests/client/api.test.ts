@@ -10,7 +10,7 @@ const input: ValidationInput = {
   languageMode: "any",
   origin: { label: "Oakland", latitude: 37.8044, longitude: -122.2712 },
   maxTravelMinutes: 120,
-  forecastMonths: 3
+  forecastMonths: 4
 };
 
 afterEach(() => {

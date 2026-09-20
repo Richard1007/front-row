@@ -26,7 +26,7 @@ function input(overrides: Partial<ValidationInput> = {}): ValidationInput {
     languageMode: "weighted",
     origin: { label: "Oakland", latitude: 37.8044, longitude: -122.2712 },
     maxTravelMinutes: 120,
-    forecastMonths: 3,
+    forecastMonths: 4,
     ...overrides
   };
 }
@@ -101,7 +101,7 @@ describe("buildRecommendations", () => {
     expect(result.every((item) => item.tier === "T1")).toBe(true);
   });
 
-  it("includes an evening show on the final date of the three-month window", () => {
+  it("includes a selected-artist show inside the four-month window", () => {
     const sanJose = event("wang-san-jose", {
       name: "Wang Leehom The Best Place II World Tour",
       startAt: "2026-12-20T04:00:00.000Z",
@@ -131,8 +131,7 @@ describe("buildRecommendations", () => {
       isTribute: true
     });
 
-    const [result] = buildRecommendations(input(), [tribute], { now: NOW });
-    expect(result?.tier).toBe("T2");
+    expect(buildRecommendations(input(), [tribute], { now: NOW })).toEqual([]);
   });
 
   it("does not dilute an existing favorite when another preference is added", () => {
@@ -225,6 +224,15 @@ describe("buildRecommendations", () => {
     expect(result[0]?.tier).toBe("T0");
   });
 
+  it("treats an event as already on sale at the exact on-sale instant", () => {
+    const [result] = buildRecommendations(input(), [event("on-sale-now", {
+      performers: [{ name: "王力宏", canonicalId: "artist:leehom" }],
+      onSaleAt: NOW.toISOString()
+    })], { now: NOW });
+
+    expect(result?.tier).toBe("T1");
+  });
+
   it("filters events outside the date or travel boundary and events with unknown status", () => {
     const far = event("far", {
       genres: ["Mandopop"],
@@ -282,13 +290,22 @@ describe("buildRecommendations", () => {
   it("limits normal results to eight and includes at most one exploration event", () => {
     const strong = Array.from({ length: 10 }, (_, index) =>
       event(`strong-${index}`, {
+        performers: [{
+          name: `Related ${index}`,
+          similarTo: [{
+            preferenceName: "王力宏",
+            score: 0.75,
+            confidence: 0.8,
+            source: "listenbrainz"
+          }]
+        }],
         genres: ["Mandopop"],
         startAt: `2026-10-${String(index + 10).padStart(2, "0")}T03:00:00.000Z`
       })
     );
     const exploratory = Array.from({ length: 2 }, (_, index) =>
       event(`explore-${index}`, {
-        genres: ["Death metal"],
+        genres: ["Mandopop"],
         languages: [
           { language: "cmn", role: "significant", confidence: 1, source: "manual" }
         ]
@@ -309,6 +326,25 @@ describe("buildRecommendations", () => {
       languages: [{ language: "de", role: "primary", confidence: 1, source: "manual" }]
     });
     expect(buildRecommendations(input(), [irrelevant], { now: NOW })).toEqual([]);
+  });
+
+  it("clamps non-finite and fractional result limits", () => {
+    const related = Array.from({ length: 4 }, (_, index) =>
+      event(`related-limit-${index}`, {
+        performers: [{
+          name: `Related ${index}`,
+          similarTo: [{
+            preferenceName: "王力宏",
+            score: 0.8,
+            confidence: 1,
+            source: "listenbrainz"
+          }]
+        }]
+      })
+    );
+
+    expect(buildRecommendations(input(), related, { now: NOW, limit: 2.9 })).toHaveLength(2);
+    expect(buildRecommendations(input(), related, { now: NOW, limit: Number.NaN })).toHaveLength(4);
   });
 
   it("returns transparent score details, reasons, travel, and warnings", () => {

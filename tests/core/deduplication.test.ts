@@ -212,6 +212,25 @@ describe("deduplicateEvents", () => {
     expect(deduplicateEvents([first, second])).toHaveLength(2);
   });
 
+  it("does not merge cross-provider placeholder venues without coordinates", () => {
+    const otherProvider = event({
+      canonicalKey: "placeholder-other",
+      venue: { name: "Venue TBA" },
+      sources: [{
+        provider: "jambase",
+        eventId: "jb-placeholder",
+        fetchedAt: "2026-09-19T00:00:00.000Z",
+        mode: "fixture"
+      }]
+    });
+    const ticketmaster = event({
+      canonicalKey: "placeholder-ticketmaster",
+      venue: { name: "Venue TBA" }
+    });
+
+    expect(deduplicateEvents([ticketmaster, otherProvider])).toHaveLength(2);
+  });
+
   it("does not mutate the caller's source arrays", () => {
     const original = event();
     const originalSources = original.sources;

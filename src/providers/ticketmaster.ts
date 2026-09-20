@@ -14,6 +14,7 @@ import {
   deduplicateProviderEvents,
   encodeGeohash,
   mapEventStatus,
+  preferredArtistQueryName,
   requestSignal,
   safeProviderUrl,
   uniqueStrings,
@@ -73,12 +74,17 @@ export class TicketmasterProvider implements EventProvider {
     }
 
     const now = this.now();
-    const artistQueries = input.artists.map((artist) => {
-      const attractionId = findArtistProfile(artist.name, artist.canonicalId)
-        ?.providerIds?.ticketmaster;
+    const directArtists = [
+      ...input.artists,
+      ...(input.discoveryArtists ?? []).slice(0, 12)
+    ];
+    const artistQueries = directArtists.map((artist) => {
+      const profile = findArtistProfile(artist.name, artist.canonicalId) ??
+        artist.aliases?.map((alias) => findArtistProfile(alias)).find(Boolean);
+      const attractionId = profile?.providerIds?.ticketmaster;
       return attractionId
         ? { attractionId }
-        : { keyword: artist.name };
+        : { keyword: preferredArtistQueryName(artist) };
     });
     // Exact artist queries protect recall. The final un-keyworded regional query
     // supplies discovery candidates for genre/language scoring.

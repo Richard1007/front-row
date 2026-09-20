@@ -23,7 +23,7 @@ function defaultFormInput(artist = "王力宏"): ValidationInput {
     languageMode: "weighted",
     origin: { label: "Oakland", latitude: 37.8044, longitude: -122.2712 },
     maxTravelMinutes: 120,
-    forecastMonths: 3
+    forecastMonths: 4
   };
 }
 

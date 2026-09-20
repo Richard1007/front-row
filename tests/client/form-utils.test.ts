@@ -11,11 +11,13 @@ const validState = (): ValidationFormState => ({
   artists: [{ id: "artist-1", name: " 王力宏 ", weight: "priority" }],
   genres: [{ id: "genre-1", name: "R&B", weight: "like" }],
   languages: [
-    { id: "language-1", language: "普通话", percentage: "90" },
-    { id: "language-2", language: "英语", percentage: "10" }
+    { id: "language-1", language: "cmn" },
+    { id: "language-2", language: "en" }
   ],
   languageMode: "weighted",
-  originLabel: "Oakland 家里",
+  locationMode: "city",
+  selectedCityId: "geonames:5378538",
+  originLabel: "Oakland, California, United States",
   latitude: "37.8044",
   longitude: "-122.2712",
   maxTravelMinutes: "120"
@@ -40,13 +42,16 @@ describe("validateForm", () => {
     const errors = validateForm(state, "en");
 
     expect(errors.artists).toBe("Enter at least one artist you genuinely want to see.");
-    expect(errors.latitude).toBe("Latitude must be between -90 and 90.");
+    expect(errors.originLabel).toBe("Choose a city from the list or load your current location.");
   });
 
-  it("requires weighted language percentages to total 100", () => {
+  it("limits language categories to three", () => {
     const state = validState();
-    state.languages[0]!.percentage = "60";
-    expect(validateForm(state).languages).toContain("70%");
+    state.languages = ["cmn", "en", "es", "fr"].map((language, index) => ({
+      id: `language-${index}`,
+      language
+    }));
+    expect(validateForm(state, "en").languages).toBe("Choose up to 3 performance languages.");
   });
 
   it("does not require language rows in any-language mode", () => {
@@ -62,8 +67,7 @@ describe("validateForm", () => {
     state.longitude = "-181";
     state.maxTravelMinutes = "10";
     const errors = validateForm(state);
-    expect(errors.latitude).toBeTruthy();
-    expect(errors.longitude).toBeTruthy();
+    expect(errors.originLabel).toBeTruthy();
     expect(errors.maxTravelMinutes).toBeTruthy();
   });
 
@@ -92,8 +96,7 @@ describe("validateForm", () => {
 
     const errors = validateForm(state);
 
-    expect(errors.latitude).toBeTruthy();
-    expect(errors.longitude).toBeTruthy();
+    expect(errors.originLabel).toBeTruthy();
   });
 });
 
@@ -101,10 +104,13 @@ describe("toValidationInput", () => {
   it("trims names and converts form numbers", () => {
     const input = toValidationInput(validState());
     expect(input.artists).toEqual([{ name: "王力宏", weight: "priority" }]);
-    expect(input.languages[0]).toEqual({ language: "普通话", percentage: 90 });
+    expect(input.languages).toEqual([
+      { language: "cmn", percentage: 50 },
+      { language: "en", percentage: 50 }
+    ]);
     expect(input.origin.latitude).toBe(37.8044);
     expect(input.maxTravelMinutes).toBe(120);
-    expect(input.forecastMonths).toBe(3);
+    expect(input.forecastMonths).toBe(4);
     expect(input.genres).toEqual([{ name: "R&B", weight: "like" }]);
   });
 
@@ -112,6 +118,22 @@ describe("toValidationInput", () => {
     const state = validState();
     state.languageMode = "any";
     expect(toValidationInput(state).languages).toEqual([]);
+  });
+
+  it("splits three selected languages to exactly 100 percent", () => {
+    const state = validState();
+    state.languages = ["cmn", "en", "fr"].map((language, index) => ({
+      id: `language-${index}`,
+      language
+    }));
+
+    const languages = toValidationInput(state).languages;
+    expect(languages).toEqual([
+      { language: "cmn", percentage: 33.33 },
+      { language: "en", percentage: 33.33 },
+      { language: "fr", percentage: 33.34 }
+    ]);
+    expect(languages.reduce((total, item) => total + item.percentage, 0)).toBe(100);
   });
 
   it("does not coerce blank required numbers to zero", () => {

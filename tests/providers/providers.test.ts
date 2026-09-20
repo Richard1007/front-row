@@ -12,7 +12,7 @@ import {
 } from "../../src/providers/ticketmaster";
 import type { EventProvider } from "../../src/providers/types";
 import { ProviderUnavailableError } from "../../src/providers/types";
-import { safeProviderUrl } from "../../src/providers/utils";
+import { preferredArtistQueryName, safeProviderUrl } from "../../src/providers/utils";
 
 const NOW = new Date("2026-09-19T18:00:00.000Z");
 
@@ -32,10 +32,17 @@ const input: ValidationInput = {
   languageMode: "weighted",
   origin: { label: "Oakland, CA", latitude: 37.8044, longitude: -122.2712 },
   maxTravelMinutes: 120,
-  forecastMonths: 3,
+  forecastMonths: 4,
 };
 
 describe("provider contract", () => {
+  it("prefers an ASCII alias when querying ticket providers", () => {
+    expect(preferredArtistQueryName({
+      name: "林俊傑",
+      aliases: ["林俊傑", "JJ Lin"]
+    })).toBe("JJ Lin");
+  });
+
   it("returns an offline Wang Leehom Bay Area scenario", async () => {
     const provider = new FixtureProvider({ now: () => NOW });
     const events = await provider.fetchEvents(input);
@@ -69,7 +76,7 @@ describe("provider contract", () => {
     expect(firstUrl.searchParams.has("keyword")).toBe(false);
     expect(firstUrl.searchParams.get("classificationName")).toBe("Music");
     expect(firstUrl.searchParams.get("startDateTime")).toBe("2026-09-19T18:00:00Z");
-    expect(firstUrl.searchParams.get("endDateTime")).toBe("2026-12-20T18:00:00Z");
+    expect(firstUrl.searchParams.get("endDateTime")).toBe("2027-01-19T18:00:00Z");
     expect(firstUrl.searchParams.get("radius")).toBe("90");
     expect(firstUrl.searchParams.get("geoPoint")).toMatch(/^[0-9b-hjkmnp-z]{9}$/);
     const regionalUrl = new URL(String(fetcher.mock.calls[2]?.[0]));
@@ -124,7 +131,7 @@ describe("provider contract", () => {
     expect(url.searchParams.get("artistId")).toBe("jambase:5911976");
     expect(url.searchParams.has("artistName")).toBe(false);
     expect(url.searchParams.get("eventDateFrom")).toBe("2026-09-19");
-    expect(url.searchParams.get("eventDateTo")).toBe("2026-12-20");
+    expect(url.searchParams.get("eventDateTo")).toBe("2027-01-19");
     expect(url.searchParams.get("geoLatitude")).toBe("37.8044");
     expect(url.searchParams.get("geoLongitude")).toBe("-122.2712");
     expect(url.searchParams.get("geoRadiusAmount")).toBe("90");

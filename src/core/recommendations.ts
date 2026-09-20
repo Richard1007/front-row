@@ -248,15 +248,18 @@ function weightedScore(dimensions: {
 function tierFor(
   event: NormalizedEvent,
   exact: ExactArtistMatch | undefined,
+  artistMatch: number | undefined,
   score: number,
   now: Date
 ): RecommendationTier {
   if (exact) {
-    const futureOnSale = event.onSaleAt ? Date.parse(event.onSaleAt) >= now.getTime() : false;
+    const futureOnSale = event.onSaleAt ? Date.parse(event.onSaleAt) > now.getTime() : false;
     if (futureOnSale) return "T0";
     return "T1";
   }
-  return score >= DISCOVERY_THRESHOLD ? "T2" : "T3";
+  return artistMatch !== undefined && artistMatch > 0 && score >= DISCOVERY_THRESHOLD
+    ? "T2"
+    : "T3";
 }
 
 function reasonFor(
@@ -313,8 +316,9 @@ function rankEvent(
   event: NormalizedEvent,
   now: Date
 ): RankedEvent | undefined {
-  if (!eligibleByDate(event, now, input.forecastMonths ?? 3)) return undefined;
+  if (!eligibleByDate(event, now, input.forecastMonths ?? 4)) return undefined;
   if (!event.venue.coordinates) return undefined;
+  if (isTributeEvent(event)) return undefined;
 
   const exact = exactArtistMatch(event, input.artists);
   if (event.status !== "active") return undefined;
@@ -328,8 +332,20 @@ function rankEvent(
     language: languageDimension(event, input)
   };
   const aggregate = weightedScore(dimensions);
-  const tier = tierFor(event, exact, aggregate.final, now);
+  const tier = tierFor(event, exact, dimensions.artist?.match, aggregate.final, now);
 
+  if (
+    tier === "T3" &&
+    !(dimensions.artist?.match && dimensions.artist.match > 0) &&
+    !(
+      dimensions.genre?.match &&
+      dimensions.genre.match > 0 &&
+      dimensions.language?.match &&
+      dimensions.language.match > 0
+    )
+  ) {
+    return undefined;
+  }
   if (tier === "T3" && aggregate.final < EXPLORATION_THRESHOLD) return undefined;
 
   return {
@@ -359,7 +375,10 @@ export function buildRecommendations(
   options: RecommendationOptions = {}
 ): RankedEvent[] {
   const now = options.now ?? new Date();
-  const limit = Math.min(DEFAULT_RESULT_LIMIT, Math.max(1, options.limit ?? DEFAULT_RESULT_LIMIT));
+  const requestedLimit = Number.isFinite(options.limit)
+    ? Math.floor(options.limit!)
+    : DEFAULT_RESULT_LIMIT;
+  const limit = Math.min(DEFAULT_RESULT_LIMIT, Math.max(1, requestedLimit));
   const enrichedInput = enrichValidationInput(input);
   const enrichedEvents = events.map(enrichEvent);
 

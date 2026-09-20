@@ -32,6 +32,10 @@ function sourceKey(source: EventSource): string {
   return `${source.provider}:${source.eventId}`;
 }
 
+function isPlaceholderVenue(value: string): boolean {
+  return /^(venue )?(tba|tbd|unknown|to be announced|to be determined)$/.test(value);
+}
+
 function sameVenue(left: NormalizedEvent, right: NormalizedEvent): boolean {
   const leftVenue = normalizedVenue(left.venue.name);
   const rightVenue = normalizedVenue(right.venue.name);
@@ -51,6 +55,7 @@ function sameVenue(left: NormalizedEvent, right: NormalizedEvent): boolean {
     leftVenue &&
     rightVenue &&
     leftVenue === rightVenue &&
+    !isPlaceholderVenue(leftVenue) &&
     (!leftCity || !rightCity || leftCity === rightCity)
   ) {
     return true;

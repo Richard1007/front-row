@@ -21,13 +21,13 @@ function validInput(): ValidationInput {
 }
 
 describe("validateInput", () => {
-  it("trims values and defaults the fixed three-month window", () => {
+  it("trims values and defaults the fixed four-month window", () => {
     const input = validInput();
     input.artists[0]!.name = "  王力宏  ";
     const result = validateInput(input);
 
     expect(result.artists[0]?.name).toBe("王力宏");
-    expect(result.forecastMonths).toBe(3);
+    expect(result.forecastMonths).toBe(4);
   });
 
   it("enforces artist and genre limits", () => {
@@ -51,6 +51,41 @@ describe("validateInput", () => {
     input.genres = [{ name: "A genre typed outside the pool", weight: "like" }];
 
     expect(safeValidateInput(input).success).toBe(false);
+  });
+
+  it("normalizes supported language labels to canonical values", () => {
+    const input = validInput();
+    input.languages = [
+      { language: "普通话", percentage: 70 },
+      { language: "English", percentage: 30 }
+    ];
+
+    expect(validateInput(input).languages).toEqual([
+      { language: "cmn", percentage: 70 },
+      { language: "en", percentage: 30 }
+    ]);
+  });
+
+  it("rejects unsupported, duplicate, and more than three languages", () => {
+    const unsupported = validInput();
+    unsupported.languages = [{ language: "Klingon", percentage: 100 }];
+    expect(safeValidateInput(unsupported).success).toBe(false);
+
+    const duplicate = validInput();
+    duplicate.languages = [
+      { language: "Chinese", percentage: 50 },
+      { language: "Mandarin", percentage: 50 }
+    ];
+    expect(safeValidateInput(duplicate).success).toBe(false);
+
+    const tooMany = validInput();
+    tooMany.languages = [
+      { language: "cmn", percentage: 25 },
+      { language: "en", percentage: 25 },
+      { language: "es", percentage: 25 },
+      { language: "fr", percentage: 25 }
+    ];
+    expect(safeValidateInput(tooMany).success).toBe(false);
   });
 
   it("requires weighted language percentages to total 100", () => {
@@ -82,7 +117,28 @@ describe("validateInput", () => {
     expect(safeValidateInput(input).success).toBe(false);
   });
 
-  it("rejects a non-three-month Milestone 0 window and invalid coordinates", () => {
+  it("rejects duplicate artists expressed as known aliases", () => {
+    const input = validInput();
+    input.artists = [
+      { name: "王力宏", weight: "priority" },
+      { name: "Wang Leehom", weight: "like" }
+    ];
+
+    expect(safeValidateInput(input).success).toBe(false);
+  });
+
+  it("requires at least one artist", () => {
+    expect(safeValidateInput({ ...validInput(), artists: [] }).success).toBe(false);
+  });
+
+  it("enforces travel-time boundaries", () => {
+    expect(safeValidateInput({ ...validInput(), maxTravelMinutes: 14 }).success).toBe(false);
+    expect(safeValidateInput({ ...validInput(), maxTravelMinutes: 15 }).success).toBe(true);
+    expect(safeValidateInput({ ...validInput(), maxTravelMinutes: 360 }).success).toBe(true);
+    expect(safeValidateInput({ ...validInput(), maxTravelMinutes: 361 }).success).toBe(false);
+  });
+
+  it("rejects a non-four-month Milestone 0 window and invalid coordinates", () => {
     expect(safeValidateInput({ ...validInput(), forecastMonths: 1 }).success).toBe(false);
     expect(
       safeValidateInput({

@@ -3,7 +3,18 @@ import type {
   EventStatus,
   NormalizedEvent,
   ProviderId,
+  WeightedPreference,
 } from "../core/types";
+
+export function preferredArtistQueryName(
+  artist: Pick<WeightedPreference, "name" | "aliases">,
+): string {
+  return (
+    artist.aliases?.find(
+      (alias) => /^[\x20-\x7E]+$/.test(alias) && /[A-Za-z]/.test(alias),
+    ) ?? artist.name
+  );
+}
 
 /**
  * A provider radius is only a broad candidate filter. Route-time eligibility is

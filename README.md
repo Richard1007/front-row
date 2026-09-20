@@ -2,9 +2,11 @@
 
 Front Row is currently a private, local validation tool for concert recommendations. It asks for weighted artists, genres, performance-language preferences, and a travel boundary, then compares available event sources and returns a small, explained shortlist.
 
-The current search horizon is the next three calendar months. Music styles come from a controlled bilingual list (up to three), while artist names can be entered in Chinese or English. Known aliases are resolved to each provider's stable artist identifier before live queries are made.
+The current search horizon is the next four calendar months. Music styles come from a controlled bilingual list (up to three), while artist names can be entered in Chinese or English. Known aliases are resolved to each provider's stable artist identifier before live queries are made.
 
 Milestone 0 intentionally excludes accounts, payments, email delivery, cloud deployment, and LLM ranking.
+
+Related-artist discovery now uses the free MusicBrainz and ListenBrainz APIs. These services only decide which artists are worth checking; every displayed event must still be confirmed by Ticketmaster or JamBase. T2 requires a sourced related-artist match, while a T3 exploration result requires stronger multi-signal evidence. The optional paid LLM design is documented in [AI-assisted discovery guardrails](plans/ai-assisted-discovery.md) and is not enabled without explicit billing approval.
 
 ## Run locally
 
@@ -19,6 +21,8 @@ npm run dev
 Open the local address printed after `Local:` in the terminal, normally [http://127.0.0.1:5173](http://127.0.0.1:5173). If that port is already occupied, Vite automatically prints the next available port. The local API listens only on `127.0.0.1:8787`.
 
 Front Row now defaults to English and `FR_DATA_MODE=live`. Until at least one API key is configured, the page clearly reports that its real-data sources are unavailable and returns no made-up recommendations. Use the language control in the page header to switch the entire interface to Chinese.
+
+City autocomplete uses a city index stored inside this repository. Searches stay on the local server; the typed city is not sent to a geocoding service. The index includes cities with a population of 15,000 or more and a limited set of useful aliases. Run `npm run build:city-index` to refresh it from the official source.
 
 ## Try real event data
 
@@ -65,7 +69,12 @@ Fixture data verifies the workflow and ranking logic. It does **not** measure Ti
 npm run dev       # start local page and API
 npm test          # run deterministic core and provider tests
 npm run build     # type-check and build the page
+npm run build:city-index # refresh the checked-in city search data
 ```
+
+## City data attribution
+
+City names, administrative areas, coordinates, populations, and aliases are derived from [GeoNames cities15000](https://download.geonames.org/export/dump/) and are used under the [Creative Commons Attribution 4.0 License](https://creativecommons.org/licenses/by/4.0/). Attribution: © GeoNames.
 
 ## Project decisions
 

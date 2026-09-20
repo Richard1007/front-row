@@ -1,0 +1,25 @@
+ticket: gh-4
+type: story
+phase: 07-complete
+complexity: complex
+depth_profile:
+  research: deep
+  refine: standard
+  design: standard
+  architecture: standard
+  implementation: deep
+  qa: deep
+readiness:
+  status: PASS
+  notes:
+    - The primary form is reduced to artists, genres, languages, and location.
+    - Language and city values use controlled, privacy-aware local taxonomies.
+    - The search horizon is four calendar months.
+    - Free MusicBrainz and ListenBrainz expansion supplies sourced T2 candidates.
+    - Ticketmaster and JamBase remain the only event-fact sources.
+review:
+  status: PASS
+  tests: 110
+  build: PASS
+  browser_smoke: PASS
+  paid_gate: OpenAI API remains disabled pending separate billing approval.

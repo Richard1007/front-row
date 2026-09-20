@@ -5,6 +5,7 @@ import type {
   WeightedPreference
 } from "../core/types";
 import { isGenreValue } from "../data/genres";
+import { isLanguageValue } from "../data/languages";
 import { tr, type Locale } from "./i18n";
 
 export { GENRE_OPTIONS, genreLabel, isGenreValue } from "../data/genres";
@@ -19,7 +20,6 @@ export interface EditablePreference {
 export interface EditableLanguage {
   id: string;
   language: string;
-  percentage: string;
 }
 
 export interface ValidationFormState {
@@ -27,6 +27,8 @@ export interface ValidationFormState {
   genres: EditablePreference[];
   languages: EditableLanguage[];
   languageMode: "weighted" | "any";
+  locationMode: "city" | "current";
+  selectedCityId: string;
   originLabel: string;
   latitude: string;
   longitude: string;
@@ -54,13 +56,21 @@ const cleanPreferences = (items: EditablePreference[]): WeightedPreference[] =>
 const cleanGenres = (items: EditablePreference[]): WeightedPreference[] =>
   cleanPreferences(items).filter(({ name }) => isGenreValue(name));
 
-const cleanLanguages = (items: EditableLanguage[]): LanguagePreference[] =>
-  items
-    .map(({ language, percentage }) => ({
-      language: language.trim(),
-      percentage: Number(percentage)
-    }))
-    .filter(({ language }) => language.length > 0);
+const cleanLanguages = (items: EditableLanguage[]): LanguagePreference[] => {
+  const values = items
+    .map(({ language }) => language.trim())
+    .filter(isLanguageValue);
+  if (values.length === 0) return [];
+
+  const hundredths = Math.floor(10_000 / values.length);
+  return values.map((language, index) => ({
+    language,
+    percentage:
+      index === values.length - 1
+        ? (10_000 - hundredths * (values.length - 1)) / 100
+        : hundredths / 100
+  }));
+};
 
 const parseRequiredNumber = (value: string): number =>
   value.trim() === "" ? Number.NaN : Number(value);
@@ -86,29 +96,25 @@ export function validateForm(state: ValidationFormState, locale: Locale = "zh"):
   }
 
   if (state.languageMode === "weighted") {
-    const languages = cleanLanguages(state.languages);
-    const hasInvalidPercentage = languages.some(
-      ({ percentage }) => !Number.isFinite(percentage) || percentage < 0 || percentage > 100
-    );
-    const total = languages.reduce((sum, { percentage }) => sum + percentage, 0);
-
-    if (languages.length === 0) {
+    if (state.languages.length === 0) {
       errors.languages = tr(locale, "formLanguageRequired");
-    } else if (hasInvalidPercentage) {
-      errors.languages = tr(locale, "formLanguageRange");
-    } else if (Math.abs(total - 100) > 0.01) {
-      errors.languages = tr(locale, "formLanguageTotal", { total });
+    } else if (state.languages.length > 3) {
+      errors.languages = tr(locale, "formLanguageMax");
+    } else if (state.languages.some(({ language }) => !isLanguageValue(language))) {
+      errors.languages = tr(locale, "formLanguageInvalid");
     }
   }
 
-  if (!state.originLabel.trim()) {
+  if (
+    !state.originLabel.trim() ||
+    !Number.isFinite(latitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    !Number.isFinite(longitude) ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
     errors.originLabel = tr(locale, "formOriginRequired");
-  }
-  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
-    errors.latitude = tr(locale, "formLatitude");
-  }
-  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
-    errors.longitude = tr(locale, "formLongitude");
   }
   if (!Number.isFinite(travelMinutes) || travelMinutes < 15 || travelMinutes > 360) {
     errors.maxTravelMinutes = tr(locale, "formTravel");
@@ -129,6 +135,6 @@ export function toValidationInput(state: ValidationFormState): ValidationInput {
       longitude: parseRequiredNumber(state.longitude)
     },
     maxTravelMinutes: parseRequiredNumber(state.maxTravelMinutes),
-    forecastMonths: 3
+    forecastMonths: 4
   };
 }
