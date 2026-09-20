@@ -1,0 +1,17 @@
+ticket: gh-1
+type: story
+phase: 05-implement
+complexity: complex
+depth_profile:
+  research: deep
+  refine: standard
+  design: standard
+  architecture: standard
+  implementation: standard
+  qa: deep
+readiness:
+  status: PASS
+  notes:
+    - Acceptance criteria are testable and stored in GitHub Issue 1.
+    - StubHub live access is explicitly gated behind partner credentials.
+    - Fixture mode makes the prototype runnable without secrets.

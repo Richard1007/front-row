@@ -1,0 +1,306 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  buildRecommendations,
+  type NormalizedEvent,
+  type ValidationInput
+} from "../../src/core/index.js";
+
+const NOW = new Date("2026-09-19T12:00:00.000Z");
+
+function input(overrides: Partial<ValidationInput> = {}): ValidationInput {
+  return {
+    artists: [
+      {
+        name: "王力宏",
+        aliases: ["Wang Leehom", "Leehom Wang"],
+        canonicalId: "artist:leehom",
+        weight: "priority"
+      }
+    ],
+    genres: [{ name: "Mandopop", weight: "priority" }],
+    languages: [
+      { language: "cmn", percentage: 90 },
+      { language: "en", percentage: 10 }
+    ],
+    languageMode: "weighted",
+    origin: { label: "Oakland", latitude: 37.8044, longitude: -122.2712 },
+    maxTravelMinutes: 120,
+    forecastDays: 90,
+    ...overrides
+  };
+}
+
+function event(key: string, overrides: Partial<NormalizedEvent> = {}): NormalizedEvent {
+  return {
+    canonicalKey: key,
+    name: `Event ${key}`,
+    startAt: "2026-10-10T03:00:00.000Z",
+    status: "active",
+    venue: {
+      name: "Oakland Arena",
+      city: "Oakland",
+      region: "CA",
+      coordinates: { latitude: 37.7503, longitude: -122.2028 }
+    },
+    performers: [{ name: `Artist ${key}`, canonicalId: `artist:${key}` }],
+    genres: [],
+    languages: [],
+    sources: [
+      {
+        provider: "fixture",
+        eventId: key,
+        fetchedAt: NOW.toISOString(),
+        mode: "fixture"
+      }
+    ],
+    ...overrides
+  };
+}
+
+describe("buildRecommendations", () => {
+  it("always ranks an exact selected artist above a stronger discovery event", () => {
+    const exact = event("exact", {
+      performers: [{ name: "Leehom Wang", canonicalId: "artist:leehom" }]
+    });
+    const discovery = event("discovery", {
+      performers: [
+        {
+          name: "Perfect Similar Artist",
+          similarTo: [
+            {
+              preferenceCanonicalId: "artist:leehom",
+              score: 1,
+              confidence: 1,
+              source: "manual"
+            }
+          ]
+        }
+      ],
+      genres: ["Mandopop"],
+      languages: [{ language: "cmn", role: "primary", confidence: 1, source: "manual" }]
+    });
+
+    const result = buildRecommendations(input(), [discovery, exact], { now: NOW });
+
+    expect(result.map((item) => item.canonicalKey)).toEqual(["exact", "discovery"]);
+    expect(result[0]?.tier).toBe("T1");
+    expect(result[1]?.tier).toBe("T2");
+  });
+
+  it("uses canonical IDs and confirmed aliases for exact matches", () => {
+    const byId = event("id", {
+      performers: [{ name: "Different Display Name", canonicalId: "artist:leehom" }]
+    });
+    const byAlias = event("alias", {
+      performers: [{ name: "Wang Leehom" }]
+    });
+
+    const result = buildRecommendations(input(), [byId, byAlias], { now: NOW });
+    expect(result).toHaveLength(2);
+    expect(result.every((item) => item.tier === "T1")).toBe(true);
+  });
+
+  it("never treats a tribute show as an exact artist match", () => {
+    const tribute = event("tribute", {
+      name: "Wang Leehom Tribute Night",
+      performers: [{ name: "Wang Leehom", canonicalId: "artist:leehom" }],
+      genres: ["Mandopop"],
+      isTribute: true
+    });
+
+    const [result] = buildRecommendations(input(), [tribute], { now: NOW });
+    expect(result?.tier).toBe("T2");
+  });
+
+  it("does not dilute an existing favorite when another preference is added", () => {
+    const favorite = event("favorite", {
+      performers: [{ name: "Wang Leehom", canonicalId: "artist:leehom" }]
+    });
+    const before = buildRecommendations(input(), [favorite], { now: NOW })[0];
+    const after = buildRecommendations(
+      input({
+        artists: [
+          ...input().artists,
+          { name: "A New Favorite", canonicalId: "artist:new", weight: "priority" }
+        ]
+      }),
+      [favorite],
+      { now: NOW }
+    )[0];
+
+    expect(after?.score.artist).toBe(before?.score.artist);
+    expect(after?.score.final).toBe(before?.score.final);
+  });
+
+  it("treats missing genre and language as neutral", () => {
+    const related = event("related", {
+      performers: [
+        {
+          name: "Related Artist",
+          similarTo: [
+            {
+              preferenceName: "王力宏",
+              score: 0.7,
+              confidence: 1,
+              source: "provider"
+            }
+          ]
+        }
+      ]
+    });
+
+    const [result] = buildRecommendations(input(), [related], { now: NOW });
+    expect(result?.score.final).toBeCloseTo(0.7);
+    expect(result?.score.genre).toBeUndefined();
+    expect(result?.score.language).toBeUndefined();
+    expect(result?.warnings.join(" ")).toContain("未因此降低排名");
+  });
+
+  it("uses fixed artist importance values rather than sum normalization", () => {
+    const liked = event("liked", {
+      performers: [{ name: "Liked Artist", canonicalId: "artist:liked" }]
+    });
+    const base = input({
+      artists: [{ name: "Liked Artist", canonicalId: "artist:liked", weight: "like" }],
+      genres: [],
+      languageMode: "any",
+      languages: []
+    });
+    const before = buildRecommendations(base, [liked], { now: NOW })[0];
+    const after = buildRecommendations(
+      {
+        ...base,
+        artists: [...base.artists, { name: "Priority Artist", weight: "priority" }]
+      },
+      [liked],
+      { now: NOW }
+    )[0];
+
+    expect(before?.score.artist).toBe(0.5);
+    expect(after?.score.artist).toBe(0.5);
+  });
+
+  it("turns upcoming on-sale changes into T0 and excludes inactive events", () => {
+    const exactPerformer = [{ name: "王力宏", canonicalId: "artist:leehom" }];
+    const events = [
+      event("cancelled", { performers: exactPerformer, status: "cancelled" }),
+      event("postponed", {
+        performers: exactPerformer,
+        status: "postponed",
+        startAt: "2026-10-12T03:00:00.000Z"
+      }),
+      event("on-sale", {
+        performers: exactPerformer,
+        startAt: "2026-10-14T03:00:00.000Z",
+        onSaleAt: "2026-09-25T16:00:00.000Z"
+      })
+    ];
+
+    const result = buildRecommendations(input(), events, { now: NOW });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.canonicalKey).toBe("on-sale");
+    expect(result[0]?.tier).toBe("T0");
+  });
+
+  it("filters events outside the date or travel boundary and events with unknown status", () => {
+    const far = event("far", {
+      genres: ["Mandopop"],
+      venue: {
+        name: "Madison Square Garden",
+        city: "New York",
+        coordinates: { latitude: 40.7505, longitude: -73.9934 }
+      }
+    });
+    const tooLate = event("late", {
+      genres: ["Mandopop"],
+      startAt: "2027-02-01T03:00:00.000Z"
+    });
+    const unknown = event("unknown", { genres: ["Mandopop"], status: "unknown" });
+
+    expect(buildRecommendations(input(), [far, tooLate, unknown], { now: NOW })).toEqual([]);
+  });
+
+  it("deduplicates provider records before ranking and keeps provenance", () => {
+    const ticketmaster = event("shared", {
+      name: "Wang Leehom Live",
+      performers: [{ name: "王力宏", canonicalId: "artist:leehom" }],
+      sources: [
+        {
+          provider: "ticketmaster",
+          eventId: "tm-1",
+          url: "https://tm.test/1",
+          fetchedAt: NOW.toISOString(),
+          mode: "fixture"
+        }
+      ]
+    });
+    const jambase = event("shared", {
+      name: "王力宏演唱会",
+      performers: [{ name: "Wang Leehom", canonicalId: "artist:leehom" }],
+      sources: [
+        {
+          provider: "jambase",
+          eventId: "jb-1",
+          url: "https://jb.test/1",
+          fetchedAt: NOW.toISOString(),
+          mode: "fixture"
+        }
+      ]
+    });
+
+    const [result] = buildRecommendations(input(), [ticketmaster, jambase], { now: NOW });
+    expect(result?.sources).toHaveLength(2);
+    expect(result?.sources.map((source) => source.provider)).toEqual([
+      "jambase",
+      "ticketmaster"
+    ]);
+  });
+
+  it("limits normal results to eight and includes at most one exploration event", () => {
+    const strong = Array.from({ length: 10 }, (_, index) =>
+      event(`strong-${index}`, {
+        genres: ["Mandopop"],
+        startAt: `2026-10-${String(index + 10).padStart(2, "0")}T03:00:00.000Z`
+      })
+    );
+    const exploratory = Array.from({ length: 2 }, (_, index) =>
+      event(`explore-${index}`, {
+        genres: ["Death metal"],
+        languages: [
+          { language: "cmn", role: "significant", confidence: 1, source: "manual" }
+        ]
+      })
+    );
+
+    const result = buildRecommendations(input(), [...strong, ...exploratory], { now: NOW });
+    expect(result).toHaveLength(8);
+    expect(result.filter((item) => item.tier === "T3")).toHaveLength(0);
+
+    const onlyExploration = buildRecommendations(input(), exploratory, { now: NOW });
+    expect(onlyExploration.filter((item) => item.tier === "T3")).toHaveLength(1);
+  });
+
+  it("never pads the list with zero-match local events", () => {
+    const irrelevant = event("irrelevant", {
+      genres: ["Death metal"],
+      languages: [{ language: "de", role: "primary", confidence: 1, source: "manual" }]
+    });
+    expect(buildRecommendations(input(), [irrelevant], { now: NOW })).toEqual([]);
+  });
+
+  it("returns transparent score details, reasons, travel, and warnings", () => {
+    const exact = event("details", {
+      performers: [{ name: "王力宏", canonicalId: "artist:leehom", role: "headliner" }],
+      genres: ["Mandopop"],
+      languages: [{ language: "cmn", role: "primary", confidence: 1, source: "manual" }]
+    });
+    const [result] = buildRecommendations(input(), [exact], { now: NOW });
+
+    expect(result?.reason).toContain("王力宏");
+    expect(result?.score).toMatchObject({ artist: 1, genre: 1, language: 0.9 });
+    expect(result?.estimatedTravelMinutes).toBeGreaterThan(0);
+    expect(result?.distanceMiles).toBeGreaterThan(0);
+    expect(result?.warnings[0]).toContain("估算");
+  });
+});

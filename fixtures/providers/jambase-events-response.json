@@ -1,0 +1,41 @@
+{
+  "success": true,
+  "events": [
+    {
+      "@type": "Concert",
+      "identifier": "jambase:wang-sf",
+      "name": "王力宏 at Chase Center",
+      "url": "https://www.jambase.com/show/wang-sf",
+      "startDate": "2026-10-30T19:30:00-07:00",
+      "eventStatus": "scheduled",
+      "x-genre": "mandopop",
+      "location": {
+        "name": "Chase Center",
+        "address": {
+          "addressLocality": "San Francisco",
+          "addressRegion": { "name": "California", "alternateName": "US-CA" }
+        },
+        "geo": { "latitude": 37.768, "longitude": -122.3877 }
+      },
+      "performer": [
+        {
+          "identifier": "jambase:artist-wang",
+          "name": "王力宏",
+          "x-isHeadliner": true,
+          "genre": ["mandopop", "r&b"]
+        }
+      ],
+      "offers": [
+        {
+          "name": "Ticket partner",
+          "url": "https://tickets.test/wang",
+          "validFrom": "2026-09-20T10:00:00-07:00"
+        }
+      ]
+    },
+    {
+      "identifier": "jambase:deleted",
+      "deletionStatus": "deleted"
+    }
+  ]
+}

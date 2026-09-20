@@ -1,0 +1,19 @@
+{
+  "source_of_truth": "github",
+  "jira_project_key": "",
+  "github_repo": "Richard1007/front-row",
+  "repo_type": "single",
+  "monorepo_tool": "none",
+  "monorepo_workspaces": [],
+  "compliance_gates": [],
+  "squash_merge": true,
+  "worktree_naming": "{repo}-{story-summary}-{story-id}",
+  "draft_pr_on_start": true,
+  "idle_research": true,
+  "idle_threshold": 0.7,
+  "ci_comments_on_pr": false,
+  "related_repos": [],
+  "routines": {
+    "enabled": false
+  }
+}

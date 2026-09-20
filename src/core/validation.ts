@@ -1,0 +1,109 @@
+import { z } from "zod";
+
+import { normalizeLanguageTag } from "../data/artistProfiles.js";
+import type { ValidationInput } from "./types.js";
+
+const importanceSchema = z.enum(["priority", "like", "occasional"]);
+
+const weightedPreferenceSchema = z.object({
+  name: z.string().trim().min(1, "名称不能为空").max(120, "名称过长"),
+  weight: importanceSchema,
+  canonicalId: z.string().trim().min(1).max(200).optional(),
+  aliases: z.array(z.string().trim().min(1).max(120)).max(20).optional()
+});
+
+const languagePreferenceSchema = z.object({
+  language: z.string().trim().min(1, "语言不能为空").max(40).transform(normalizeLanguageTag),
+  percentage: z.number().finite().min(0).max(100)
+});
+
+function normalizedName(value: string): string {
+  return value.trim().normalize("NFKC").toLocaleLowerCase("en-US");
+}
+
+function containsDuplicates(values: string[]): boolean {
+  return new Set(values.map(normalizedName)).size !== values.length;
+}
+
+export const validationInputSchema = z
+  .object({
+    artists: z.array(weightedPreferenceSchema).max(10, "最多选择 10 位艺人"),
+    genres: z.array(weightedPreferenceSchema).max(3, "最多选择 3 种风格"),
+    languages: z.array(languagePreferenceSchema).max(20),
+    languageMode: z.enum(["weighted", "any"]),
+    origin: z.object({
+      label: z.string().trim().min(1, "出发地点不能为空").max(160),
+      latitude: z.number().finite().min(-90).max(90),
+      longitude: z.number().finite().min(-180).max(180)
+    }),
+    maxTravelMinutes: z.number().int().min(1).max(720),
+    forecastDays: z.number().int().default(90)
+  })
+  .superRefine((value, context) => {
+    if (value.forecastDays !== 90) {
+      context.addIssue({
+        code: "custom",
+        path: ["forecastDays"],
+        message: "Milestone 0 固定搜索未来 90 天"
+      });
+    }
+
+    if (containsDuplicates(value.artists.map((artist) => artist.name))) {
+      context.addIssue({
+        code: "custom",
+        path: ["artists"],
+        message: "同一位艺人不能重复添加"
+      });
+    }
+
+    if (containsDuplicates(value.genres.map((genre) => genre.name))) {
+      context.addIssue({
+        code: "custom",
+        path: ["genres"],
+        message: "同一种风格不能重复添加"
+      });
+    }
+
+    if (containsDuplicates(value.languages.map((language) => language.language))) {
+      context.addIssue({
+        code: "custom",
+        path: ["languages"],
+        message: "同一种语言不能重复添加"
+      });
+    }
+
+    if (value.languageMode === "any" && value.languages.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["languages"],
+        message: "选择“语言不限”时无需设置语言比例"
+      });
+    }
+
+    if (value.languageMode === "weighted") {
+      if (value.languages.length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["languages"],
+          message: "请至少添加一种语言，或选择“语言不限”"
+        });
+      }
+
+      const total = value.languages.reduce((sum, item) => sum + item.percentage, 0);
+      if (Math.abs(total - 100) > 0.001) {
+        context.addIssue({
+          code: "custom",
+          path: ["languages"],
+          message: "语言比例总和必须是 100%"
+        });
+      }
+    }
+  });
+
+export function validateInput(input: unknown): ValidationInput {
+  return validationInputSchema.parse(input);
+}
+
+export function safeValidateInput(input: unknown) {
+  return validationInputSchema.safeParse(input);
+}

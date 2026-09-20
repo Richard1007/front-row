@@ -1,0 +1,137 @@
+[
+  {
+    "eventId": "fixture-wang-sf-001",
+    "dayOffset": 42,
+    "localTime": "19:30:00-07:00",
+    "name": "王力宏 Wang Leehom — The Best Place",
+    "status": "active",
+    "venue": {
+      "name": "Chase Center",
+      "city": "San Francisco",
+      "region": "CA",
+      "latitude": 37.768,
+      "longitude": -122.3877
+    },
+    "performers": [
+      { "name": "王力宏", "canonicalId": "fixture:artist:wang-leehom", "role": "headliner" }
+    ],
+    "genres": ["Mandopop", "R&B", "Pop"],
+    "languages": [
+      { "language": "Mandarin", "role": "primary", "confidence": 1, "source": "manual" },
+      { "language": "English", "role": "occasional", "confidence": 0.8, "source": "manual" }
+    ],
+    "url": "https://example.test/events/wang-leehom-san-francisco"
+  },
+  {
+    "eventId": "fixture-silk-road-oakland-002",
+    "dayOffset": 25,
+    "localTime": "20:00:00-07:00",
+    "name": "Silk Road R&B Night",
+    "status": "active",
+    "venue": {
+      "name": "Fox Theater",
+      "city": "Oakland",
+      "region": "CA",
+      "latitude": 37.8081,
+      "longitude": -122.2701
+    },
+    "performers": [
+      { "name": "The Mandarin Soul Collective", "canonicalId": "fixture:artist:mandarin-soul", "role": "headliner" }
+    ],
+    "genres": ["Mandopop", "R&B"],
+    "languages": [
+      { "language": "Mandarin", "role": "significant", "confidence": 0.9, "source": "manual" },
+      { "language": "English", "role": "significant", "confidence": 0.9, "source": "manual" }
+    ],
+    "url": "https://example.test/events/silk-road-rnb-oakland"
+  },
+  {
+    "eventId": "fixture-bruno-san-jose-003",
+    "dayOffset": 70,
+    "localTime": "20:00:00-07:00",
+    "name": "Bruno Mars Live",
+    "status": "active",
+    "venue": {
+      "name": "SAP Center",
+      "city": "San Jose",
+      "region": "CA",
+      "latitude": 37.3327,
+      "longitude": -121.9012
+    },
+    "performers": [
+      { "name": "Bruno Mars", "canonicalId": "fixture:artist:bruno-mars", "role": "headliner" }
+    ],
+    "genres": ["R&B", "Pop"],
+    "languages": [
+      { "language": "English", "role": "primary", "confidence": 1, "source": "manual" }
+    ],
+    "url": "https://example.test/events/bruno-mars-san-jose"
+  },
+  {
+    "eventId": "fixture-wang-tribute-004",
+    "dayOffset": 18,
+    "localTime": "20:00:00-07:00",
+    "name": "A Tribute to Wang Leehom",
+    "status": "active",
+    "venue": {
+      "name": "The New Parish",
+      "city": "Oakland",
+      "region": "CA",
+      "latitude": 37.8077,
+      "longitude": -122.2724
+    },
+    "performers": [
+      { "name": "Bay Area Tribute Ensemble", "canonicalId": "fixture:artist:tribute", "role": "headliner" }
+    ],
+    "genres": ["Mandopop"],
+    "languages": [
+      { "language": "Mandarin", "role": "primary", "confidence": 0.8, "source": "manual" }
+    ],
+    "isTribute": true,
+    "url": "https://example.test/events/wang-leehom-tribute"
+  },
+  {
+    "eventId": "fixture-wang-cancelled-005",
+    "dayOffset": 60,
+    "localTime": "19:30:00-07:00",
+    "name": "王力宏 Wang Leehom — San Jose",
+    "status": "cancelled",
+    "venue": {
+      "name": "San Jose Civic",
+      "city": "San Jose",
+      "region": "CA",
+      "latitude": 37.3304,
+      "longitude": -121.8889
+    },
+    "performers": [
+      { "name": "王力宏", "canonicalId": "fixture:artist:wang-leehom", "role": "headliner" }
+    ],
+    "genres": ["Mandopop", "R&B"],
+    "languages": [
+      { "language": "Mandarin", "role": "primary", "confidence": 1, "source": "manual" }
+    ],
+    "url": "https://example.test/events/wang-leehom-san-jose-cancelled"
+  },
+  {
+    "eventId": "fixture-wang-los-angeles-006",
+    "dayOffset": 35,
+    "localTime": "20:00:00-07:00",
+    "name": "王力宏 Wang Leehom — Los Angeles",
+    "status": "active",
+    "venue": {
+      "name": "Kia Forum",
+      "city": "Inglewood",
+      "region": "CA",
+      "latitude": 33.9582,
+      "longitude": -118.3419
+    },
+    "performers": [
+      { "name": "王力宏", "canonicalId": "fixture:artist:wang-leehom", "role": "headliner" }
+    ],
+    "genres": ["Mandopop", "R&B"],
+    "languages": [
+      { "language": "Mandarin", "role": "primary", "confidence": 1, "source": "manual" }
+    ],
+    "url": "https://example.test/events/wang-leehom-los-angeles"
+  }
+]

@@ -1,0 +1,36 @@
+{
+  "_embedded": {
+    "events": [
+      {
+        "id": "tm-wang-sf",
+        "name": "王力宏 Wang Leehom",
+        "url": "https://www.ticketmaster.com/event/wang",
+        "dates": {
+          "start": { "dateTime": "2026-10-31T02:30:00Z" },
+          "status": { "code": "onsale" }
+        },
+        "sales": {
+          "public": { "startDateTime": "2026-09-20T17:00:00Z" }
+        },
+        "classifications": [
+          {
+            "segment": { "name": "Music" },
+            "genre": { "name": "Pop" },
+            "subGenre": { "name": "R&B" }
+          }
+        ],
+        "_embedded": {
+          "attractions": [{ "id": "artist-wang", "name": "王力宏" }],
+          "venues": [
+            {
+              "name": "Chase Center",
+              "city": { "name": "San Francisco" },
+              "state": { "stateCode": "CA" },
+              "location": { "latitude": "37.768", "longitude": "-122.3877" }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
