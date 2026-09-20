@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { loadBenchmarkFixture } from "../../src/evaluation/benchmark.js";
 import {
   LLM_EVALUATION_MODELS,
+  LLM_SELECTION_REASON_CODES,
   buildResponsesRequest,
   estimateModelCostUsd,
   prepareLlmEvaluation,
@@ -13,12 +14,24 @@ import {
 const fixtureUrl = new URL("./fixtures/front-row-baseline.json", import.meta.url);
 
 function responseFor(selectedEventIds: string[], index = 0): Response {
+  const selections = selectedEventIds.map((eventId) => ({
+    eventId,
+    reasonCode: eventId.startsWith("discovery-")
+      ? "explicit_genre_match"
+      : "sourced_artist_similarity",
+    confidence: 0.7,
+    evidenceRefs: [`${eventId}#e1`]
+  }));
+  return outputResponse({ selections }, index);
+}
+
+function outputResponse(output: unknown, index = 0): Response {
   return new Response(JSON.stringify({
     output: [{
       type: "message",
       content: [{
         type: "output_text",
-        text: JSON.stringify({ selectedEventIds })
+        text: JSON.stringify(output)
       }]
     }],
     usage: {
@@ -47,6 +60,14 @@ describe("offline-first LLM comparison harness", () => {
       (event) => event.tier === "T2" || event.tier === "T3"
     )).toBe(true);
     expect(prepared.candidatePayload.candidateEvents.every(
+      (event) => event.evidence.length > 0
+    )).toBe(true);
+    expect(new Set(prepared.candidatePayload.candidateEvents.flatMap(
+      (event) => event.evidence.map((evidence) => evidence.ref)
+    )).size).toBe(
+      prepared.candidatePayload.candidateEvents.flatMap((event) => event.evidence).length
+    );
+    expect(prepared.candidatePayload.candidateEvents.every(
       (event) => !("deterministicScore" in event) && !("deterministicReason" in event)
     )).toBe(true);
     expect(prepared.candidatePayload.policy).toMatchObject({
@@ -55,7 +76,7 @@ describe("offline-first LLM comparison harness", () => {
     });
   });
 
-  it("builds a stateless strict Responses API request with an ID-only schema", async () => {
+  it("builds a stateless strict request with evidence-bound structured selections", async () => {
     const fixture = await loadBenchmarkFixture(fixtureUrl);
     const prepared = prepareLlmEvaluation(fixture);
     const request = buildResponsesRequest("gpt-5.6-luna", prepared.candidatePayload);
@@ -68,12 +89,20 @@ describe("offline-first LLM comparison harness", () => {
       schema: {
         type: "object",
         additionalProperties: false,
-        required: ["selectedEventIds"]
+        required: ["selections"]
       }
     });
-    expect(request.text.format.schema.properties.selectedEventIds.items.enum)
-      .toEqual(candidateIds);
+    const selectionSchema = request.text.format.schema.properties.selections.items;
+    expect(selectionSchema.properties.eventId.enum).toEqual(candidateIds);
+    expect(selectionSchema.properties.reasonCode.enum).toEqual(LLM_SELECTION_REASON_CODES);
+    expect(selectionSchema.properties.confidence).toEqual({
+      type: "number",
+      minimum: 0,
+      maximum: 1
+    });
+    expect(selectionSchema.properties.evidenceRefs.minItems).toBe(1);
     expect(request.instructions).toContain("Never invent");
+    expect(request.instructions).toContain("no evidence for trending status");
   });
 
   it("never calls the network without both explicit live mode and an API key", async () => {
@@ -94,6 +123,26 @@ describe("offline-first LLM comparison harness", () => {
       fetchImpl: fetchMock
     })).rejects.toThrow("no API requests were sent");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not spend money when exact favorites fill every available slot", async () => {
+    const fixture = await loadBenchmarkFixture(fixtureUrl);
+    const fetchMock = vi.fn<typeof fetch>();
+    const exactOnlyFixture = {
+      ...fixture,
+      precisionK: 2
+    };
+
+    const report = await runLlmComparison(exactOnlyFixture, {
+      live: true,
+      apiKey: "test-key",
+      fetchImpl: fetchMock
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(report.results.every((result) => result.status === "not_run")).toBe(true);
+    expect(report.results.every((result) => result.error?.includes("No discovery candidates")))
+      .toBe(true);
   });
 
   it("compares all four models on byte-identical candidate payloads and records metrics", async () => {
@@ -131,6 +180,12 @@ describe("offline-first LLM comparison harness", () => {
     expect(report.results.every((result) => result.schemaValid)).toBe(true);
     expect(report.results.every((result) => result.latencyMs === 25)).toBe(true);
     expect(report.results.map((result) => result.selectedEventIds)).toEqual(selections);
+    expect(report.results[0]?.selections[0]).toEqual({
+      eventId: "related-jj-lin",
+      reasonCode: "sourced_artist_similarity",
+      confidence: 0.7,
+      evidenceRefs: ["related-jj-lin#e1"]
+    });
     expect(report.results[3]?.quality?.finalPrecisionAtKProxy).toMatchObject({
       numerator: 7,
       denominator: 9,
@@ -153,12 +208,19 @@ describe("offline-first LLM comparison harness", () => {
     expect(report.results[0]?.estimatedCostUsd).toBe(0.000284);
   });
 
-  it("rejects fabricated IDs even if a provider returns HTTP 200", async () => {
+  it("rejects unknown and locked exact IDs even if a provider returns HTTP 200", async () => {
     const fixture = await loadBenchmarkFixture(fixtureUrl);
     let call = 0;
     const fetchMock = vi.fn<typeof fetch>(async () => {
       const response = call === 0
-        ? responseFor(["fabricated-event-id"])
+        ? outputResponse({
+            selections: [{
+              eventId: "favorite-wang-alias",
+              reasonCode: "sourced_artist_similarity",
+              confidence: 0.5,
+              evidenceRefs: ["favorite-wang-alias#e1"]
+            }]
+          })
         : responseFor([]);
       call += 1;
       return response;
@@ -179,6 +241,166 @@ describe("offline-first LLM comparison harness", () => {
       finalSelectionIds: report.lockedExactEventIds
     });
     expect(invalid?.error).toContain("outside the verified candidates");
+  });
+
+  it("rejects duplicate event IDs and evidence refs", async () => {
+    const fixture = await loadBenchmarkFixture(fixtureUrl);
+    const duplicateSelection = {
+      eventId: "related-jj-lin",
+      reasonCode: "sourced_artist_similarity",
+      confidence: 0.7,
+      evidenceRefs: ["related-jj-lin#e1"]
+    };
+    let call = 0;
+    const fetchMock = vi.fn<typeof fetch>(async () => {
+      const response = call === 0
+        ? outputResponse({ selections: [duplicateSelection, duplicateSelection] })
+        : responseFor([]);
+      call += 1;
+      return response;
+    });
+
+    const report = await runLlmComparison(fixture, {
+      live: true,
+      apiKey: "test-key",
+      fetchImpl: fetchMock,
+      nowMs: () => 0
+    });
+
+    expect(report.results[0]).toMatchObject({
+      status: "invalid_schema",
+      selections: [],
+      selectedEventIds: [],
+      finalSelectionIds: report.lockedExactEventIds
+    });
+    expect(report.results[0]?.error).toContain("duplicate event ID");
+  });
+
+  it("rejects evidence from another event or confidence beyond cited evidence", async () => {
+    const fixture = await loadBenchmarkFixture(fixtureUrl);
+    const invalidOutputs = [
+      {
+        selections: [{
+          eventId: "related-jj-lin",
+          reasonCode: "sourced_artist_similarity",
+          confidence: 0.7,
+          evidenceRefs: ["related-dangelo#e1"]
+        }]
+      },
+      {
+        selections: [{
+          eventId: "related-jj-lin",
+          reasonCode: "sourced_artist_similarity",
+          confidence: 0.95,
+          evidenceRefs: ["related-jj-lin#e1"]
+        }]
+      }
+    ];
+    let call = 0;
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      outputResponse(invalidOutputs[call++] ?? { selections: [] })
+    );
+
+    const report = await runLlmComparison(fixture, {
+      live: true,
+      apiKey: "test-key",
+      fetchImpl: fetchMock,
+      nowMs: () => 0
+    });
+
+    expect(report.results[0]?.error).toContain("outside its verified candidate");
+    expect(report.results[1]?.error).toContain("exceeded its cited evidence");
+    expect(report.results.slice(0, 2).every((result) =>
+      result.status === "invalid_schema" && result.finalSelectionIds.join(",") ===
+        report.lockedExactEventIds.join(",")
+    )).toBe(true);
+  });
+
+  it.each(["trending", "rare_opportunity", "album_affinity"])(
+    "rejects unsupported %s claims without evidence",
+    async (reasonCode) => {
+      const fixture = await loadBenchmarkFixture(fixtureUrl);
+      let call = 0;
+      const fetchMock = vi.fn<typeof fetch>(async () => {
+        const response = call === 0
+          ? outputResponse({
+              selections: [{
+                eventId: "related-jj-lin",
+                reasonCode,
+                confidence: 0.7,
+                evidenceRefs: ["related-jj-lin#e1"]
+              }]
+            })
+          : responseFor([]);
+        call += 1;
+        return response;
+      });
+
+      const report = await runLlmComparison(fixture, {
+        live: true,
+        apiKey: "test-key",
+        fetchImpl: fetchMock,
+        nowMs: () => 0
+      });
+
+      expect(report.results[0]).toMatchObject({
+        status: "invalid_schema",
+        selections: [],
+        selectedEventIds: [],
+        finalSelectionIds: report.lockedExactEventIds
+      });
+      expect(report.results[0]?.error).toContain("unsupported reasonCode");
+    }
+  );
+
+  it("rejects free-form album claims and reason codes unsupported by cited evidence", async () => {
+    const fixture = await loadBenchmarkFixture(fixtureUrl);
+    const invalidOutputs = [
+      {
+        selections: [{
+          eventId: "related-jj-lin",
+          reasonCode: "sourced_artist_similarity",
+          confidence: 0.7,
+          evidenceRefs: ["related-jj-lin#e1"],
+          albumClaim: "touring a new album"
+        }]
+      },
+      {
+        selections: [{
+          eventId: "related-jj-lin",
+          reasonCode: "explicit_genre_match",
+          confidence: 0.7,
+          evidenceRefs: ["related-jj-lin#e1"]
+        }]
+      }
+    ];
+    let call = 0;
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      outputResponse(invalidOutputs[call++] ?? { selections: [] })
+    );
+
+    const report = await runLlmComparison(fixture, {
+      live: true,
+      apiKey: "test-key",
+      fetchImpl: fetchMock,
+      nowMs: () => 0
+    });
+
+    expect(report.results[0]?.error).toContain("unexpected property");
+    expect(report.results[1]?.error).toContain("did not match its cited evidence");
+  });
+
+  it("rejects duplicate candidate IDs before constructing an API request", async () => {
+    const fixture = await loadBenchmarkFixture(fixtureUrl);
+    const prepared = prepareLlmEvaluation(fixture);
+    const candidate = prepared.candidatePayload.candidateEvents[0]!;
+    const invalidPayload = {
+      ...prepared.candidatePayload,
+      candidateEvents: [...prepared.candidatePayload.candidateEvents, candidate]
+    };
+
+    expect(() => buildResponsesRequest("gpt-5.6-luna", invalidPayload))
+      .toThrow("duplicate event IDs");
   });
 
   it("stops paid comparisons after the account reports insufficient credits", async () => {

@@ -1,0 +1,50 @@
+{
+  "id": "llm-oys-jazz-cross-language",
+  "description": "Omnipotent Youth Society taste should cross language boundaries through indie, jazz, and improvisational affinity.",
+  "now": "2026-09-20T12:00:00.000Z",
+  "precisionK": 9,
+  "input": {
+    "artists": [{ "name": "万能青年旅店", "weight": "priority", "aliases": ["Omnipotent Youth Society"], "canonicalId": "musicbrainz:4cd1ce8c-469e-4ff6-a987-59819b975a85" }],
+    "genres": [
+      { "name": "Indie", "weight": "priority" },
+      { "name": "Jazz", "weight": "priority" },
+      { "name": "Rock", "weight": "like" }
+    ],
+    "inferredLanguages": [{ "language": "cmn", "percentage": 100 }],
+    "languages": [],
+    "languageMode": "any",
+    "origin": { "label": "Oakland, CA", "latitude": 37.8044, "longitude": -122.2712 },
+    "maxTravelMinutes": 120,
+    "forecastMonths": 4
+  },
+  "knownFavoriteShows": [{ "artist": "万能青年旅店", "eventKeys": ["oys-exact"] }],
+  "relevanceLabels": {
+    "oys-exact": true,
+    "oys-toe": true,
+    "oys-snarky-puppy": true,
+    "oys-chinese-jazz": true,
+    "oys-cantonese-jazz": true,
+    "oys-mainstream-rock": false,
+    "oys-generic-mandopop": false
+  },
+  "humanRelevanceAnnotations": {
+    "oys-exact": { "relevant": true, "rationale": "Exact selected artist under its confirmed English alias." },
+    "oys-toe": { "relevant": true, "rationale": "Japanese post-rock and intricate ensemble playing transfer across language." },
+    "oys-snarky-puppy": { "relevant": true, "rationale": "Improvisation and jazz-rock musicianship match the underlying taste rather than language." },
+    "oys-chinese-jazz": { "relevant": true, "rationale": "Mandarin indie-jazz is aligned on language and both priority genres." },
+    "oys-cantonese-jazz": { "relevant": true, "rationale": "Cantonese is acceptable because jazz affinity is stronger than the inferred Mandarin tendency." },
+    "oys-mainstream-rock": { "relevant": false, "rationale": "Rock alone is too broad and lacks the literary or improvisational character." },
+    "oys-generic-mandopop": { "relevant": false, "rationale": "Language match alone does not imply musical relevance." }
+  },
+  "referenceSelectionIds": ["oys-toe", "oys-snarky-puppy", "oys-chinese-jazz", "oys-cantonese-jazz"],
+  "expectedExcludedEventKeys": [],
+  "events": [
+    { "canonicalKey": "oys-exact", "name": "Omnipotent Youth Society Live", "startAt": "2026-10-10T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "Omnipotent Youth Society" }], "genres": ["Indie", "Rock", "Jazz"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "oys-exact", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "oys-toe", "name": "toe Live", "startAt": "2026-10-12T03:00:00.000Z", "status": "active", "venue": { "name": "The UC Theatre", "city": "Berkeley", "region": "CA", "coordinates": { "latitude": 37.8717, "longitude": -122.2681 } }, "performers": [{ "name": "toe", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:4cd1ce8c-469e-4ff6-a987-59819b975a85", "score": 0.8, "confidence": 0.85, "source": "manual" }] }], "genres": ["Rock", "Jazz"], "languages": [{ "language": "ja", "role": "occasional", "confidence": 0.8, "source": "manual" }], "sources": [{ "provider": "fixture", "eventId": "oys-toe", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "oys-snarky-puppy", "name": "Snarky Puppy Live", "startAt": "2026-10-14T03:00:00.000Z", "status": "active", "venue": { "name": "The Masonic", "city": "San Francisco", "region": "CA", "coordinates": { "latitude": 37.7912, "longitude": -122.4129 } }, "performers": [{ "name": "Snarky Puppy", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:4cd1ce8c-469e-4ff6-a987-59819b975a85", "score": 0.72, "confidence": 0.8, "source": "manual" }] }], "genres": ["Jazz", "Rock"], "languages": [{ "language": "en", "role": "occasional", "confidence": 0.8, "source": "manual" }], "sources": [{ "provider": "fixture", "eventId": "oys-snarky-puppy", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "oys-chinese-jazz", "name": "Chinese Indie Jazz Collective", "startAt": "2026-10-16T03:00:00.000Z", "status": "active", "venue": { "name": "The New Parish", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.8063, "longitude": -122.2697 } }, "performers": [{ "name": "Chinese Indie Jazz Collective" }], "genres": ["Indie", "Jazz"], "languages": [{ "language": "cmn", "role": "primary", "confidence": 0.9, "source": "manual" }], "sources": [{ "provider": "fixture", "eventId": "oys-chinese-jazz", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "oys-cantonese-jazz", "name": "Cantonese Jazz Ensemble", "startAt": "2026-10-18T03:00:00.000Z", "status": "active", "venue": { "name": "Yoshi's Oakland", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.7962, "longitude": -122.2788 } }, "performers": [{ "name": "Cantonese Jazz Ensemble" }], "genres": ["Jazz"], "languages": [{ "language": "yue", "role": "primary", "confidence": 0.9, "source": "manual" }], "sources": [{ "provider": "fixture", "eventId": "oys-cantonese-jazz", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "oys-mainstream-rock", "name": "Mainstream Rock Festival", "startAt": "2026-10-20T03:00:00.000Z", "status": "active", "venue": { "name": "Oakland Arena", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.7503, "longitude": -122.2028 } }, "performers": [{ "name": "Arena Rock All-Stars" }], "genres": ["Rock"], "languages": [{ "language": "en", "role": "primary", "confidence": 0.9, "source": "manual" }], "sources": [{ "provider": "fixture", "eventId": "oys-mainstream-rock", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "oys-generic-mandopop", "name": "Generic Mandopop Night", "startAt": "2026-10-22T03:00:00.000Z", "status": "active", "venue": { "name": "Chase Center", "city": "San Francisco", "region": "CA", "coordinates": { "latitude": 37.768, "longitude": -122.3877 } }, "performers": [{ "name": "Popular Mandarin Singer" }], "genres": ["Pop"], "languages": [{ "language": "cmn", "role": "primary", "confidence": 0.95, "source": "manual" }], "sources": [{ "provider": "fixture", "eventId": "oys-generic-mandopop", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] }
+  ]
+}

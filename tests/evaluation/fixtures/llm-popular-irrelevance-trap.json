@@ -1,0 +1,54 @@
+{
+  "id": "llm-popular-irrelevance-trap",
+  "description": "Popular artists with weak graph similarity must not displace high-affinity art-rock discoveries.",
+  "now": "2026-09-20T12:00:00.000Z",
+  "precisionK": 9,
+  "input": {
+    "artists": [{ "name": "Radiohead", "weight": "priority", "canonicalId": "musicbrainz:radiohead" }],
+    "genres": [
+      { "name": "Alternative", "weight": "priority" },
+      { "name": "Rock", "weight": "like" }
+    ],
+    "languages": [],
+    "languageMode": "any",
+    "origin": { "label": "Oakland, CA", "latitude": 37.8044, "longitude": -122.2712 },
+    "maxTravelMinutes": 120,
+    "forecastMonths": 4
+  },
+  "knownFavoriteShows": [{ "artist": "Radiohead", "eventKeys": ["trap-radiohead"] }],
+  "relevanceLabels": {
+    "trap-radiohead": true,
+    "trap-the-smile": true,
+    "trap-thom-yorke": true,
+    "trap-sigur-ros": true,
+    "trap-black-midi": true,
+    "trap-taylor-swift": false,
+    "trap-imagine-dragons": false,
+    "trap-coldplay": false,
+    "trap-generic-alt-festival": false
+  },
+  "humanRelevanceAnnotations": {
+    "trap-radiohead": { "relevant": true, "rationale": "Exact selected artist." },
+    "trap-the-smile": { "relevant": true, "rationale": "Direct Radiohead members and closely related art-rock work." },
+    "trap-thom-yorke": { "relevant": true, "rationale": "Direct solo-project relationship to the selected artist." },
+    "trap-sigur-ros": { "relevant": true, "rationale": "Atmospheric experimental rock is a strong taste-level transfer." },
+    "trap-black-midi": { "relevant": true, "rationale": "Adventurous contemporary art rock matches the user's underlying preference." },
+    "trap-taylor-swift": { "relevant": false, "rationale": "Popularity and a weak provider graph edge do not establish this user's affinity." },
+    "trap-imagine-dragons": { "relevant": false, "rationale": "Mainstream rock overlap is too broad for a compact recommendation." },
+    "trap-coldplay": { "relevant": false, "rationale": "A famous adjacent act is not sufficiently close to the selected art-rock preference." },
+    "trap-generic-alt-festival": { "relevant": false, "rationale": "Category-only alternative branding is not enough evidence." }
+  },
+  "referenceSelectionIds": ["trap-the-smile", "trap-thom-yorke", "trap-sigur-ros", "trap-black-midi"],
+  "expectedExcludedEventKeys": [],
+  "events": [
+    { "canonicalKey": "trap-radiohead", "name": "Radiohead Live", "startAt": "2026-10-10T03:00:00.000Z", "status": "active", "venue": { "name": "Greek Theatre", "city": "Berkeley", "region": "CA", "coordinates": { "latitude": 37.8736, "longitude": -122.2548 } }, "performers": [{ "name": "Radiohead", "canonicalId": "musicbrainz:radiohead" }], "genres": ["Alternative", "Rock"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "trap-radiohead", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "trap-the-smile", "name": "The Smile Live", "startAt": "2026-10-12T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "The Smile", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:radiohead", "score": 0.85, "confidence": 0.98, "source": "manual" }] }], "genres": ["Alternative", "Rock"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "trap-the-smile", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "trap-thom-yorke", "name": "Thom Yorke Live", "startAt": "2026-10-14T03:00:00.000Z", "status": "active", "venue": { "name": "The Masonic", "city": "San Francisco", "region": "CA", "coordinates": { "latitude": 37.7912, "longitude": -122.4129 } }, "performers": [{ "name": "Thom Yorke", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:radiohead", "score": 0.85, "confidence": 0.99, "source": "manual" }] }], "genres": ["Alternative", "Electronic"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "trap-thom-yorke", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "trap-sigur-ros", "name": "Sigur Rós Live", "startAt": "2026-10-16T03:00:00.000Z", "status": "active", "venue": { "name": "The Warfield", "city": "San Francisco", "region": "CA", "coordinates": { "latitude": 37.7826, "longitude": -122.4102 } }, "performers": [{ "name": "Sigur Rós", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:radiohead", "score": 0.78, "confidence": 0.88, "source": "listenbrainz" }] }], "genres": ["Alternative", "Rock"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "trap-sigur-ros", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "trap-black-midi", "name": "black midi Live", "startAt": "2026-10-18T03:00:00.000Z", "status": "active", "venue": { "name": "The Independent", "city": "San Francisco", "region": "CA", "coordinates": { "latitude": 37.7755, "longitude": -122.4378 } }, "performers": [{ "name": "black midi" }], "genres": ["Alternative", "Rock"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "trap-black-midi", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "trap-taylor-swift", "name": "Taylor Swift Live", "startAt": "2026-10-20T03:00:00.000Z", "status": "active", "venue": { "name": "Levi's Stadium", "city": "Santa Clara", "region": "CA", "coordinates": { "latitude": 37.403, "longitude": -121.97 } }, "performers": [{ "name": "Taylor Swift", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:radiohead", "score": 0.5, "confidence": 0.55, "source": "provider" }] }], "genres": ["Pop"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "trap-taylor-swift", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "trap-imagine-dragons", "name": "Imagine Dragons Live", "startAt": "2026-10-22T03:00:00.000Z", "status": "active", "venue": { "name": "Oakland Arena", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.7503, "longitude": -122.2028 } }, "performers": [{ "name": "Imagine Dragons", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:radiohead", "score": 0.58, "confidence": 0.6, "source": "provider" }] }], "genres": ["Rock"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "trap-imagine-dragons", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "trap-coldplay", "name": "Coldplay Live", "startAt": "2026-10-24T03:00:00.000Z", "status": "active", "venue": { "name": "Oracle Park", "city": "San Francisco", "region": "CA", "coordinates": { "latitude": 37.7786, "longitude": -122.3893 } }, "performers": [{ "name": "Coldplay", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:radiohead", "score": 0.62, "confidence": 0.65, "source": "provider" }] }], "genres": ["Rock", "Pop"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "trap-coldplay", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "trap-generic-alt-festival", "name": "Popular Alternative Festival", "startAt": "2026-10-26T03:00:00.000Z", "status": "active", "venue": { "name": "Bill Graham Civic", "city": "San Francisco", "region": "CA", "coordinates": { "latitude": 37.778, "longitude": -122.4173 } }, "performers": [{ "name": "Festival Headliners" }], "genres": ["Alternative"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "trap-generic-alt-festival", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] }
+  ]
+}

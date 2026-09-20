@@ -41,7 +41,7 @@ JBD_API_KEY=your_key
 
 API keys remain in the localhost server and are never sent to browser code. Live mode reports an unconfigured provider explicitly; it does not silently replace missing live data with fixture events.
 
-For an explicit, paid model comparison, add `OPENAI_API_KEY` to `.env` and run `npm run benchmark:llm -- --live`. Without `--live`, the command is always a zero-network dry run. The comparison locks T0/T1 outside the model and lets each model select only from verified T2/T3 event IDs.
+For an explicit, paid model comparison, add `OPENAI_API_KEY` to `.env` and run `npm run benchmark:llm -- --live`. Pass a specific controlled case with `--fixture tests/evaluation/fixtures/llm-oys-jazz-cross-language.json`. Without `--live`, the command is always a zero-network dry run. The comparison locks T0/T1 outside the model and lets each model select only from verified T2/T3 event IDs with evidence-bound reason codes. See the [first four-model evaluation](plans/llm-model-evaluation-2026-09-20.md) for the current result and limitations.
 
 If the page still says a source is unconfigured, confirm that the file is named exactly `.env`, restart `npm run dev`, and check that the corresponding key line is not empty.
 
@@ -87,4 +87,5 @@ City names, administrative areas, coordinates, populations, and aliases are deri
 - [Milestone 0 plan](plans/milestone-0.md)
 - [Weighted preference model](plans/research/weighted-preference-model.md)
 - [Ticket-data source research](plans/research/ticket-data-commercial-and-alternatives.md)
+- [LLM model evaluation (2026-09-20)](plans/llm-model-evaluation-2026-09-20.md)
 - [Local validator work item](https://github.com/Richard1007/front-row/issues/1)

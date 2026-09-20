@@ -1,0 +1,55 @@
+{
+  "id": "llm-baseline",
+  "description": "Mixed Mandarin and English favorites with plausible related and weak genre-only candidates.",
+  "now": "2026-09-20T12:00:00.000Z",
+  "precisionK": 9,
+  "input": {
+    "artists": [
+      { "name": "王力宏", "weight": "priority", "aliases": ["Wang Leehom"], "canonicalId": "frontrow:artist:wang-leehom" },
+      { "name": "Radiohead", "weight": "like", "canonicalId": "musicbrainz:radiohead" }
+    ],
+    "genres": [
+      { "name": "R&B", "weight": "priority" },
+      { "name": "Alternative", "weight": "like" },
+      { "name": "Jazz", "weight": "occasional" }
+    ],
+    "languages": [],
+    "languageMode": "any",
+    "origin": { "label": "Oakland, CA", "latitude": 37.8044, "longitude": -122.2712 },
+    "maxTravelMinutes": 120,
+    "forecastMonths": 4
+  },
+  "knownFavoriteShows": [
+    { "artist": "王力宏", "eventKeys": ["baseline-wang"] },
+    { "artist": "Radiohead", "eventKeys": ["baseline-radiohead"] }
+  ],
+  "relevanceLabels": {
+    "baseline-wang": true,
+    "baseline-radiohead": true,
+    "baseline-jj-lin": true,
+    "baseline-the-smile": true,
+    "baseline-dangelo": true,
+    "baseline-muse": false,
+    "baseline-generic-alt": false
+  },
+  "humanRelevanceAnnotations": {
+    "baseline-wang": { "relevant": true, "rationale": "Exact selected Mandarin artist." },
+    "baseline-radiohead": { "relevant": true, "rationale": "Exact selected English artist." },
+    "baseline-jj-lin": { "relevant": true, "rationale": "Strong Mandarin pop and R&B adjacency to Wang Leehom." },
+    "baseline-the-smile": { "relevant": true, "rationale": "Direct art-rock relationship to Radiohead." },
+    "baseline-dangelo": { "relevant": true, "rationale": "High-quality R&B discovery aligned with an explicit priority genre." },
+    "baseline-muse": { "relevant": false, "rationale": "Broad alternative-rock similarity is too weak for this compact list." },
+    "baseline-generic-alt": { "relevant": false, "rationale": "A generic category match without meaningful artist affinity." }
+  },
+  "referenceSelectionIds": ["baseline-jj-lin", "baseline-the-smile", "baseline-dangelo"],
+  "expectedExcludedEventKeys": [],
+  "events": [
+    { "canonicalKey": "baseline-wang", "name": "Wang Leehom Live", "startAt": "2026-10-10T03:00:00.000Z", "status": "active", "venue": { "name": "Oakland Arena", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.7503, "longitude": -122.2028 } }, "performers": [{ "name": "Wang Leehom" }], "genres": ["Mandopop", "R&B"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "baseline-wang", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "baseline-radiohead", "name": "Radiohead Live", "startAt": "2026-10-12T03:00:00.000Z", "status": "active", "venue": { "name": "Greek Theatre", "city": "Berkeley", "region": "CA", "coordinates": { "latitude": 37.8736, "longitude": -122.2548 } }, "performers": [{ "name": "Radiohead", "canonicalId": "musicbrainz:radiohead" }], "genres": ["Alternative"], "languages": [], "sources": [{ "provider": "fixture", "eventId": "baseline-radiohead", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "baseline-jj-lin", "name": "JJ Lin Live", "startAt": "2026-10-14T03:00:00.000Z", "status": "active", "venue": { "name": "Chase Center", "city": "San Francisco", "region": "CA", "coordinates": { "latitude": 37.768, "longitude": -122.3877 } }, "performers": [{ "name": "JJ Lin", "similarTo": [{ "preferenceCanonicalId": "frontrow:artist:wang-leehom", "score": 0.84, "confidence": 0.9, "source": "listenbrainz" }] }], "genres": ["Mandopop", "R&B"], "languages": [{ "language": "cmn", "role": "primary", "confidence": 0.9, "source": "manual" }], "sources": [{ "provider": "fixture", "eventId": "baseline-jj-lin", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "baseline-the-smile", "name": "The Smile Live", "startAt": "2026-10-16T03:00:00.000Z", "status": "active", "venue": { "name": "Fox Theater", "city": "Oakland", "region": "CA", "coordinates": { "latitude": 37.808, "longitude": -122.2707 } }, "performers": [{ "name": "The Smile", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:radiohead", "score": 0.84, "confidence": 0.95, "source": "manual" }] }], "genres": ["Alternative"], "languages": [{ "language": "en", "role": "primary", "confidence": 0.9, "source": "manual" }], "sources": [{ "provider": "fixture", "eventId": "baseline-the-smile", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "baseline-dangelo", "name": "D'Angelo Live", "startAt": "2026-10-18T03:00:00.000Z", "status": "active", "venue": { "name": "The Masonic", "city": "San Francisco", "region": "CA", "coordinates": { "latitude": 37.7912, "longitude": -122.4129 } }, "performers": [{ "name": "D'Angelo" }], "genres": ["R&B"], "languages": [{ "language": "en", "role": "primary", "confidence": 0.9, "source": "manual" }], "sources": [{ "provider": "fixture", "eventId": "baseline-dangelo", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "baseline-muse", "name": "Muse Live", "startAt": "2026-10-20T03:00:00.000Z", "status": "active", "venue": { "name": "Bill Graham Civic", "city": "San Francisco", "region": "CA", "coordinates": { "latitude": 37.778, "longitude": -122.4173 } }, "performers": [{ "name": "Muse", "similarTo": [{ "preferenceCanonicalId": "musicbrainz:radiohead", "score": 0.55, "confidence": 0.7, "source": "provider" }] }], "genres": ["Alternative"], "languages": [{ "language": "en", "role": "primary", "confidence": 0.9, "source": "manual" }], "sources": [{ "provider": "fixture", "eventId": "baseline-muse", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] },
+    { "canonicalKey": "baseline-generic-alt", "name": "Alternative Rock Night", "startAt": "2026-10-22T03:00:00.000Z", "status": "active", "venue": { "name": "Bottom of the Hill", "city": "San Francisco", "region": "CA", "coordinates": { "latitude": 37.7647, "longitude": -122.3962 } }, "performers": [{ "name": "Unknown Alternative Band" }], "genres": ["Alternative"], "languages": [{ "language": "en", "role": "primary", "confidence": 0.9, "source": "manual" }], "sources": [{ "provider": "fixture", "eventId": "baseline-generic-alt", "fetchedAt": "2026-09-20T12:00:00.000Z", "mode": "fixture" }] }
+  ]
+}
