@@ -41,6 +41,8 @@ JBD_API_KEY=your_key
 
 API keys remain in the localhost server and are never sent to browser code. Live mode reports an unconfigured provider explicitly; it does not silently replace missing live data with fixture events.
 
+For an explicit, paid model comparison, add `OPENAI_API_KEY` to `.env` and run `npm run benchmark:llm -- --live`. Without `--live`, the command is always a zero-network dry run. The comparison locks T0/T1 outside the model and lets each model select only from verified T2/T3 event IDs.
+
 If the page still says a source is unconfigured, confirm that the file is named exactly `.env`, restart `npm run dev`, and check that the corresponding key line is not empty.
 
 StubHub is represented in the provider status but remains disabled. Its official Catalog API requires approved partner or affiliate credentials, so Milestone 0 does not call it and does not scrape its website.
@@ -72,6 +74,7 @@ npm run dev       # start local page and API
 npm test          # run deterministic core and provider tests
 npm run build     # type-check and build the page
 npm run benchmark # run the frozen capability baseline
+npm run benchmark:llm # dry-run the four-model comparison; add -- --live for billed calls
 npm run build:city-index # refresh the checked-in city search data
 ```
 

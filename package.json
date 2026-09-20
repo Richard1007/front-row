@@ -13,6 +13,7 @@
     "dev:client": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "benchmark": "tsx src/evaluation/cli.ts tests/evaluation/fixtures/front-row-baseline.json",
+    "benchmark:llm": "tsx src/evaluation/llm-cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "tsx src/server/index.ts"
