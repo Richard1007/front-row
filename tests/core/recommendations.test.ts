@@ -134,6 +134,28 @@ describe("buildRecommendations", () => {
     expect(result[1]?.tier).toBe("T2");
   });
 
+  it("keeps AI-only artist expansion in the exploration tier", () => {
+    const aiDiscovery = event("ai-discovery", {
+      performers: [{
+        name: "Nai Palm",
+        similarTo: [{
+          preferenceCanonicalId: "artist:leehom",
+          score: 0.55,
+          confidence: 0.7,
+          source: "openai",
+          rationale: "shares jazz harmony and neo-soul phrasing"
+        }]
+      }]
+    });
+
+    const [result] = buildRecommendations(input(), [aiDiscovery], { now: NOW });
+
+    expect(result?.tier).toBe("T3");
+    expect(result?.isFallback).toBeUndefined();
+    expect(result?.reason).toContain("AI 根据 王力宏 推断");
+    expect(result?.reason).toContain("jazz harmony");
+  });
+
   it("uses canonical IDs and confirmed aliases for exact matches", () => {
     const byId = event("id", {
       performers: [{ name: "Different Display Name", canonicalId: "artist:leehom" }]

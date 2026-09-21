@@ -2,11 +2,11 @@
 
 Front Row is currently a private, local validation tool for concert recommendations. It asks for weighted artists, genres, performance-language preferences, and a travel boundary, then compares available event sources and returns a small, explained shortlist.
 
-The current search horizon is the next four calendar months. Music styles come from a controlled bilingual list (up to three), while artist names can be entered in Chinese or English. Known aliases are resolved to each provider's stable artist identifier before live queries are made.
+The search horizon is selectable from one to six calendar months and defaults to four. Music styles come from a controlled bilingual list (up to three), while artist names can be entered in Chinese or English. Known aliases are resolved to each provider's stable artist identifier before live queries are made.
 
-Milestone 0 intentionally excludes accounts, payments, email delivery, cloud deployment, and LLM ranking.
+Milestone 0 intentionally excludes accounts, payments, email delivery, cloud deployment, and LLM event ranking. It now includes an optional paid LLM step that expands selected artists into a small set of finer-grained artist candidates before ticket search.
 
-Related-artist discovery now uses the free MusicBrainz and ListenBrainz APIs. These services only decide which artists are worth checking; every displayed event must still be confirmed by Ticketmaster or JamBase. T2 requires a sourced related-artist match, while T3 requires reliable style or performance-language affinity and is capped so exploration cannot overwhelm the shortlist. The optional paid LLM design is documented in [AI-assisted discovery guardrails](plans/ai-assisted-discovery.md) and is not enabled without explicit billing approval.
+Related-artist discovery uses the free MusicBrainz and ListenBrainz APIs. When enabled, OpenAI adds up to four candidates using fine-grained musical traits and cross-language similarity. Every AI suggestion must pass MusicBrainz identity verification, and every displayed event must still be confirmed by Ticketmaster or JamBase. ListenBrainz-backed matches can be T2; AI-only matches are conservatively capped at T3 so the model can never impersonate an explicit favorite. The safety design is documented in [AI-assisted discovery guardrails](plans/ai-assisted-discovery.md).
 
 Explicit artist searches use one bounded, confirmed alias fallback when the provider's stable identifier or primary spelling returns no events, or when a request fails with a recoverable network or server error. This helps catalogs that list an artist under an English stage name without allowing uncontrolled query expansion.
 
@@ -40,6 +40,14 @@ JBD_API_KEY=your_key
 3. Restart `npm run dev`.
 
 API keys remain in the localhost server and are never sent to browser code. Live mode reports an unconfigured provider explicitly; it does not silently replace missing live data with fixture events.
+
+To enable AI artist expansion, add the following. A validation run makes at most one model call, caches the same taste profile for 24 hours, and safely falls back to ListenBrainz on any model error. Set `FR_LLM_DISCOVERY_ENABLED=false` to guarantee zero model calls.
+
+```dotenv
+OPENAI_API_KEY=your_key
+FR_LLM_DISCOVERY_ENABLED=true
+FR_LLM_DISCOVERY_MODEL=gpt-6-astra
+```
 
 For an explicit, paid model comparison, add `OPENAI_API_KEY` to `.env` and run `npm run benchmark:llm -- --live`. Pass a specific controlled case with `--fixture tests/evaluation/fixtures/llm-oys-jazz-cross-language.json`. Without `--live`, the command is always a zero-network dry run. The comparison locks T0/T1 outside the model and lets each model select only from verified T2/T3 event IDs with evidence-bound reason codes. See the [first four-model evaluation](plans/llm-model-evaluation-2026-09-20.md) for the current result and limitations.
 

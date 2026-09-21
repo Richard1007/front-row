@@ -1180,6 +1180,39 @@ export default function App() {
                           <small>{result.discovery.candidateArtists.join(" · ")}</small>
                         )}
                       </p>
+                      {result.discovery.llmExpansion && (
+                        <p>
+                          <strong>{tr(locale, "aiTasteExpansion")}</strong>
+                          <span>
+                            {tr(
+                              locale,
+                              result.discovery.llmExpansion.status === "completed"
+                                ? "aiExpansionCompleted"
+                                : result.discovery.llmExpansion.status === "disabled"
+                                  ? "aiExpansionDisabled"
+                                  : "aiExpansionFailed",
+                              { model: result.discovery.llmExpansion.model }
+                            )}
+                          </span>
+                          <small>
+                            {result.discovery.llmExpansion.candidateArtists.length > 0
+                              ? tr(locale, "aiVerifiedCandidates", {
+                                  artists: result.discovery.llmExpansion.candidateArtists.join(" · ")
+                                })
+                              : tr(locale, "aiNoVerifiedCandidates")}
+                          </small>
+                          {typeof result.discovery.llmExpansion.estimatedCostUsd === "number" && (
+                            <small>
+                              {tr(locale, "aiExpansionCost", {
+                                cost: `$${result.discovery.llmExpansion.estimatedCostUsd.toFixed(4)}`,
+                                cache: result.discovery.llmExpansion.cached
+                                  ? tr(locale, "aiExpansionCached")
+                                  : ""
+                              })}
+                            </small>
+                          )}
+                        </p>
+                      )}
                       {(result.discovery.inferredLanguages?.length || result.discovery.inferredGenres?.length) && (
                         <p>
                           <strong>{tr(locale, "inferredProfile")}</strong>

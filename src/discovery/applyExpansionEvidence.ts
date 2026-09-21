@@ -9,13 +9,26 @@ const MIN_SIMILARITY = 0.5;
 const MAX_SIMILARITY = 0.85;
 
 function evidenceFor(candidate: ArtistExpansionCandidate): ArtistSimilarityEvidence[] {
-  return candidate.evidence.map((evidence) => ({
-    preferenceName: evidence.seedName,
-    preferenceCanonicalId: evidence.seedCanonicalId,
-    score: Math.max(MIN_SIMILARITY, MAX_SIMILARITY - (evidence.rank - 1) * 0.04),
-    confidence: 0.75,
-    source: "listenbrainz"
-  }));
+  return candidate.evidence.map((evidence) => {
+    if (evidence.source === "openai") {
+      return {
+        preferenceName: evidence.seedName,
+        preferenceCanonicalId: evidence.seedCanonicalId,
+        score: Math.max(0.45, 0.55 - (evidence.rank - 1) * 0.02),
+        confidence: Math.min(1, Math.max(0, evidence.confidence ?? 0)),
+        source: "openai" as const,
+        rationale: evidence.rationale,
+        microgenres: evidence.microgenres
+      };
+    }
+    return {
+      preferenceName: evidence.seedName,
+      preferenceCanonicalId: evidence.seedCanonicalId,
+      score: Math.max(MIN_SIMILARITY, MAX_SIMILARITY - (evidence.rank - 1) * 0.04),
+      confidence: 0.75,
+      source: "listenbrainz" as const
+    };
+  });
 }
 
 /** Attaches sourced similarity only when a ticket provider confirms the performer. */

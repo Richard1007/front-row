@@ -58,7 +58,10 @@ export interface ArtistSimilarityEvidence {
   preferenceCanonicalId?: string;
   score: number;
   confidence: number;
-  source: "manual" | "provider" | "genre" | "listenbrainz";
+  source: "manual" | "provider" | "genre" | "listenbrainz" | "openai";
+  /** Optional model explanation about musical similarity, never an event claim. */
+  rationale?: string;
+  microgenres?: string[];
 }
 
 /** A related artist backed by an external discovery source, not an invented event. */
@@ -71,11 +74,16 @@ export interface ArtistExpansionCandidate {
 }
 
 export interface ArtistExpansionEvidence {
-  source: "listenbrainz";
+  source: "listenbrainz" | "openai";
   seedName: string;
   seedCanonicalId?: string;
   seedWeight: ImportanceLevel;
   rank: number;
+  /** Model confidence is accepted only for OpenAI-sourced candidates. */
+  confidence?: number;
+  /** Short taste explanation; never treated as ticket or event evidence. */
+  rationale?: string;
+  microgenres?: string[];
 }
 
 export interface EventSource {
@@ -183,12 +191,21 @@ export interface ValidationResult {
   recommendations: RankedEvent[];
   diagnostics: ProviderDiagnostic[];
   discovery?: {
-    source: "musicbrainz-listenbrainz";
+    source: "musicbrainz-listenbrainz" | "musicbrainz-listenbrainz-openai";
     candidateArtists: string[];
     unresolvedSeeds: string[];
     inferredLanguages?: LanguagePreference[];
     unknownLanguagePercentage?: number;
     inferredGenres?: InferredGenrePreference[];
+    llmExpansion?: {
+      status: "disabled" | "completed" | "failed";
+      model: string;
+      candidateArtists: string[];
+      cached: boolean;
+      latencyMs?: number;
+      estimatedCostUsd?: number;
+      message?: string;
+    };
   };
   coverage: {
     rawEvents: number;

@@ -44,4 +44,27 @@ describe("applyExpansionEvidence", () => {
 
     expect(result?.performers[0]?.similarTo).toBeUndefined();
   });
+
+  it("keeps AI taste evidence distinct and conservatively capped", () => {
+    const [result] = applyExpansionEvidence([event], [{
+      ...candidate,
+      evidence: [{
+        source: "openai",
+        seedName: "王力宏",
+        seedWeight: "priority",
+        rank: 1,
+        confidence: 0.96,
+        rationale: "Mandopop R&B with jazz harmony",
+        microgenres: ["neo-soul"]
+      }]
+    }]);
+
+    expect(result?.performers[0]?.similarTo).toEqual([expect.objectContaining({
+      source: "openai",
+      score: 0.55,
+      confidence: 0.96,
+      rationale: "Mandopop R&B with jazz harmony",
+      microgenres: ["neo-soul"]
+    })]);
+  });
 });

@@ -167,6 +167,14 @@ const en = {
   diagnostics: "View data-source details",
   relatedArtistSearch: "Related-artist search",
   relatedArtistCount: "{count} sourced candidates",
+  aiTasteExpansion: "AI taste expansion",
+  aiExpansionCompleted: "Completed · {model}",
+  aiExpansionDisabled: "Not enabled",
+  aiExpansionFailed: "Unavailable for this search",
+  aiVerifiedCandidates: "Verified additions: {artists}",
+  aiNoVerifiedCandidates: "No additional artist passed identity verification.",
+  aiExpansionCost: "Estimated model cost: {cost}{cache}",
+  aiExpansionCached: " · cached",
   inferredProfile: "Inferred from selected artists",
   inferredLanguageMix: "Languages: {mix}",
   inferredGenreMix: "Styles: {mix}",
@@ -364,6 +372,14 @@ const zh: Record<TranslationKey, string> = {
   diagnostics: "查看本次数据源明细",
   relatedArtistSearch: "相似艺人搜索",
   relatedArtistCount: "{count} 位有来源的候选艺人",
+  aiTasteExpansion: "AI 口味扩充",
+  aiExpansionCompleted: "已完成 · {model}",
+  aiExpansionDisabled: "尚未启用",
+  aiExpansionFailed: "本次搜索暂不可用",
+  aiVerifiedCandidates: "通过身份验证的新增艺人：{artists}",
+  aiNoVerifiedCandidates: "本次没有新增艺人通过身份验证。",
+  aiExpansionCost: "模型预估成本：{cost}{cache}",
+  aiExpansionCached: " · 已使用缓存",
   inferredProfile: "根据所选艺人自动推断",
   inferredLanguageMix: "语言：{mix}",
   inferredGenreMix: "风格：{mix}",
@@ -477,6 +493,8 @@ function translateReasonPart(value: string): string | undefined {
   if (match) return `${match[1]} is an artist you explicitly selected`;
   match = value.match(/^与 (.+) 风格相近$/);
   if (match) return `Similar in style to ${match[1]}`;
+  match = value.match(/^AI 根据 (.+) 推断：(.+)$/);
+  if (match) return `AI taste match from ${match[1]}: ${match[2]}`;
   match = value.match(/^符合你对 (.+) 的偏好$/);
   if (match) return `Matches your preference for ${translateKnownValue(match[1]!)}`;
   match = value.match(/^根据所选艺人推断你可能喜欢 (.+)$/);

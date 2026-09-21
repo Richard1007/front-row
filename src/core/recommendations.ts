@@ -51,6 +51,7 @@ interface DimensionValue {
   confidence: number;
   label?: string;
   similaritySource?: ArtistSimilarityEvidence["source"];
+  rationale?: string;
   preferenceSource?: "explicit" | "inferred";
 }
 
@@ -181,6 +182,7 @@ function artistDimension(
           manual: 0.85,
           provider: 0.7,
           listenbrainz: 0.75,
+          openai: 0.55,
           genre: 0.45
         };
         const match =
@@ -190,7 +192,8 @@ function artistDimension(
           match,
           confidence: clampUnit(affinity.confidence),
           label: preference.name,
-          similaritySource: affinity.source
+          similaritySource: affinity.source,
+          rationale: affinity.rationale
         };
         if (!best || candidate.match * candidate.confidence > best.match * best.confidence) {
           best = candidate;
@@ -339,6 +342,7 @@ function tierFor(
   event: NormalizedEvent,
   exact: ExactArtistMatch | undefined,
   hasSourcedArtistSimilarity: boolean,
+  similaritySource: ArtistSimilarityEvidence["source"] | undefined,
   now: Date
 ): RecommendationTier {
   if (exact) {
@@ -346,7 +350,7 @@ function tierFor(
     if (futureOnSale) return "T0";
     return "T1";
   }
-  return hasSourcedArtistSimilarity ? "T2" : "T3";
+  return hasSourcedArtistSimilarity && similaritySource !== "openai" ? "T2" : "T3";
 }
 
 function reasonFor(
@@ -363,7 +367,13 @@ function reasonFor(
 
   if (tier === "T0" && event.onSaleAt) reasons.push("你关注的演出即将开票");
   else if (exact) reasons.push(`${exact.preference.name} 是你明确选择的艺人`);
-  else if (dimensions.artist?.label) reasons.push(`与 ${dimensions.artist.label} 风格相近`);
+  else if (dimensions.artist?.label) {
+    reasons.push(
+      dimensions.artist.similaritySource === "openai" && dimensions.artist.rationale
+        ? `AI 根据 ${dimensions.artist.label} 推断：${dimensions.artist.rationale}`
+        : `与 ${dimensions.artist.label} 风格相近`
+    );
+  }
 
   if (dimensions.genre?.label && dimensions.genre.match > 0) {
     reasons.push(
@@ -484,7 +494,13 @@ function rankEvent(
   );
   if (preferenceEligible) funnel.preferenceEligible += 1;
 
-  const tier = tierFor(event, exact, hasSourcedArtistSimilarity, now);
+  const tier = tierFor(
+    event,
+    exact,
+    hasSourcedArtistSimilarity,
+    dimensions.artist?.similaritySource,
+    now
+  );
 
   return {
     preferenceEligible,

@@ -33,6 +33,8 @@ describe("client localization", () => {
       .toBe("Wang Leehom is an artist you explicitly selected; Includes Mandarin as a performance language");
     expect(translateServerText("en", "暂无可靠的演唱语言信息，未因此降低排名"))
       .toContain("No reliable performance-language data");
+    expect(translateServerText("en", "AI 根据 方大同 推断：shares jazz harmony"))
+      .toBe("AI taste match from 方大同: shares jazz harmony");
   });
 
   it("never leaks an unknown Chinese server message into English mode", () => {

@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { config as loadEnvironment } from "dotenv";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { pathToFileURL } from "node:url";
@@ -15,16 +15,34 @@ import {
   inferArtistGenres,
   inferArtistLanguagePreferences,
   ListenBrainzClient,
-  MusicBrainzClient
+  LLM_ARTIST_EXPANSION_MODELS,
+  LlmArtistExpansionClient,
+  MusicBrainzClient,
+  verifyLlmArtistExpansion
 } from "../discovery/index.js";
+import type { LlmArtistExpansionModel } from "../discovery/index.js";
 import { createProviderRegistry } from "../providers/index.js";
 import { normalizeLocationQuery, searchLocations } from "./locations.js";
 import { deriveDataMode, recommendationCoverage } from "./result.js";
+
+loadEnvironment({ path: [".env.local", ".env"] });
 
 const app = new Hono();
 const registry = createProviderRegistry();
 const musicBrainz = new MusicBrainzClient();
 const listenBrainz = new ListenBrainzClient();
+const llmDiscoveryEnabled = process.env.FR_LLM_DISCOVERY_ENABLED === "true";
+const configuredLlmModel = LLM_ARTIST_EXPANSION_MODELS.includes(
+  process.env.FR_LLM_DISCOVERY_MODEL as LlmArtistExpansionModel
+)
+  ? process.env.FR_LLM_DISCOVERY_MODEL as LlmArtistExpansionModel
+  : "gpt-6-astra";
+const llmArtistExpansion = new LlmArtistExpansionClient({
+  apiKey: llmDiscoveryEnabled ? process.env.OPENAI_API_KEY : undefined,
+  model: configuredLlmModel,
+  maxCandidates: 4,
+  timeoutMs: 30_000
+});
 const port = Number(process.env.FR_LOCAL_API_PORT || 8787);
 const MAX_JSON_BYTES = 64 * 1024;
 
@@ -111,8 +129,22 @@ app.post("/api/validation-runs", async (context) => {
       listenBrainz.similarArtists(musicBrainzId, limit),
     maxCandidates: 8
   });
+  const llmExpansion = await llmArtistExpansion.expand({
+    artists: identityInput.artists,
+    inferredLanguages: inferredLanguageProfile.distribution,
+    inferredGenres: rankingInput.inferredGenres
+  });
+  const verifiedLlmCandidates = llmExpansion.status === "completed"
+    ? await verifyLlmArtistExpansion(llmExpansion.candidates, identityInput.artists, {
+        resolveArtist: (name) => musicBrainz.resolveExactArtist(name),
+        existingCandidates: expansion.candidates,
+        maxCandidates: 4,
+        maxVerificationAttempts: 6
+      })
+    : [];
+  const combinedCandidates = [...expansion.candidates, ...verifiedLlmCandidates].slice(0, 12);
   const hydratedCandidates = await Promise.all(
-    expansion.candidates.map(async (candidate) => {
+    combinedCandidates.map(async (candidate) => {
       try {
         const details = await musicBrainz.artistDetails(candidate.musicBrainzId);
         if (!details) return candidate;
@@ -143,7 +175,9 @@ app.post("/api/validation-runs", async (context) => {
     recommendations,
     diagnostics,
     discovery: {
-      source: "musicbrainz-listenbrainz",
+      source: verifiedLlmCandidates.length > 0
+        ? "musicbrainz-listenbrainz-openai"
+        : "musicbrainz-listenbrainz",
       candidateArtists: hydratedCandidates.map((candidate) => candidate.name),
       unresolvedSeeds: expansion.diagnostics
         .filter((diagnostic) => diagnostic.status !== "expanded")
@@ -154,7 +188,21 @@ app.post("/api/validation-runs", async (context) => {
         name: signal.genre,
         percentage: signal.percentage,
         confidence: signal.confidence
-      }))
+      })),
+      llmExpansion: {
+        status: llmExpansion.status === "completed"
+          ? "completed"
+          : llmExpansion.status === "disabled" || llmExpansion.status === "skipped"
+            ? "disabled"
+            : "failed",
+        model: llmExpansion.model,
+        candidateArtists: verifiedLlmCandidates.map((candidate) => candidate.name),
+        cached: llmExpansion.cached,
+        ...(llmExpansion.estimatedCostUsd === null
+          ? {}
+          : { estimatedCostUsd: llmExpansion.estimatedCostUsd }),
+        ...(llmExpansion.error ? { message: llmExpansion.error } : {})
+      }
     },
     coverage: recommendationCoverage(events.length, selection.funnel)
   };
