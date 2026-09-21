@@ -60,6 +60,18 @@ function event(key: string, overrides: Partial<NormalizedEvent> = {}): Normalize
   };
 }
 
+function liveEvent(key: string, overrides: Partial<NormalizedEvent> = {}): NormalizedEvent {
+  return event(key, {
+    ...overrides,
+    sources: overrides.sources ?? [{
+      provider: "ticketmaster",
+      eventId: key,
+      fetchedAt: NOW.toISOString(),
+      mode: "live"
+    }]
+  });
+}
+
 describe("buildRecommendations", () => {
   it("exposes every eligible candidate before digest limits are applied", () => {
     const exact = event("candidate-pool-exact", {
@@ -242,18 +254,20 @@ describe("buildRecommendations", () => {
     expect(explicit?.score.genre).toBe(0.25);
   });
 
-  it("does not admit an event from a broad inferred genre alone", () => {
-    const genericRock = event("generic-rock", { genres: ["Rock"] });
-    expect(buildRecommendations(
-      input({
-        genres: [],
-        inferredGenres: [{ name: "Rock", percentage: 80, confidence: 0.9 }],
-        languageMode: "any",
-        languages: []
-      }),
-      [genericRock],
-      { now: NOW }
-    )).toEqual([]);
+  it("keeps a broad inferred genre out of the strong pool but may use it as a marked fallback", () => {
+    const genericRock = liveEvent("generic-rock", { genres: ["Rock"] });
+    const broadInput = input({
+      genres: [],
+      inferredGenres: [{ name: "Rock", percentage: 80, confidence: 0.9 }],
+      languageMode: "any",
+      languages: []
+    });
+    const pool = buildRecommendationCandidatePool(broadInput, [genericRock], { now: NOW });
+    const [result] = buildRecommendations(broadInput, [genericRock], { now: NOW });
+
+    expect(pool.candidates).toEqual([]);
+    expect(pool.fallbackCandidates).toHaveLength(1);
+    expect(result).toMatchObject({ canonicalKey: "generic-rock", tier: "T3", isFallback: true });
   });
 
   it("uses fixed artist importance values rather than sum normalization", () => {
@@ -461,21 +475,24 @@ describe("buildRecommendations", () => {
     expect(result.filter((item) => item.tier === "T2")).toHaveLength(6);
   });
 
-  it("returns fewer than the limit when no additional event has affinity", () => {
+  it("fills a sparse strong shortlist to three with marked nearby fallbacks", () => {
     const exact = event("only-relevant", {
       performers: [{ name: "Wang Leehom", canonicalId: "artist:leehom" }]
     });
     const irrelevant = Array.from({ length: 12 }, (_, index) =>
-      event(`irrelevant-${index}`, { genres: ["Death metal"] })
+      liveEvent(`irrelevant-${index}`, { genres: ["Death metal"] })
     );
 
     const selection = buildRecommendationSelection(input(), [exact, ...irrelevant], {
       now: NOW
     });
     expect(selection.recommendations.map((item) => item.canonicalKey)).toEqual([
-      "only-relevant"
+      "only-relevant",
+      "irrelevant-0",
+      "irrelevant-1"
     ]);
-    expect(selection.funnel.rejected.no_preference_affinity).toBe(12);
+    expect(selection.recommendations.slice(1).every((item) => item.isFallback)).toBe(true);
+    expect(selection.funnel.rejected.no_preference_affinity).toBe(10);
   });
 
   it("protects one show per selected artist before adding repeat exact shows", () => {
@@ -626,7 +643,7 @@ describe("buildRecommendations", () => {
       performers: [{ name: "Wang Leehom", canonicalId: "artist:leehom" }]
     });
     const outsideForecast = event("old", { startAt: "2026-01-01T00:00:00.000Z" });
-    const noAffinity = event("no-affinity", { genres: ["Death metal"] });
+    const noAffinity = liveEvent("no-affinity", { genres: ["Death metal"] });
 
     const selection = buildRecommendationSelection(
       input(),
@@ -634,7 +651,7 @@ describe("buildRecommendations", () => {
       { now: NOW }
     );
 
-    expect(selection.recommendations).toHaveLength(1);
+    expect(selection.recommendations).toHaveLength(2);
     expect(selection.funnel).toMatchObject({
       inputEvents: 4,
       deduplicatedEvents: 3,
@@ -643,21 +660,80 @@ describe("buildRecommendations", () => {
       activeNonTribute: 2,
       insideTravelBoundary: 2,
       preferenceEligible: 1,
-      selectedEvents: 1,
+      selectedEvents: 2,
       rejected: {
         duplicate_event: 1,
         outside_forecast: 1,
-        no_preference_affinity: 1
+        no_preference_affinity: 0
       }
     });
   });
 
-  it("never pads the list with zero-match local events", () => {
-    const irrelevant = event("irrelevant", {
+  it("marks a zero-match provider event as fallback instead of presenting it as a strong match", () => {
+    const irrelevant = liveEvent("irrelevant", {
       genres: ["Death metal"],
       languages: [{ language: "de", role: "primary", confidence: 1, source: "manual" }]
     });
-    expect(buildRecommendations(input(), [irrelevant], { now: NOW })).toEqual([]);
+    const [result] = buildRecommendations(input(), [irrelevant], { now: NOW });
+    expect(result).toMatchObject({ canonicalKey: "irrelevant", tier: "T3", isFallback: true });
+    expect(result?.warnings).toContain(
+      "没有找到可靠的偏好匹配。这是经过验证的附近演出，不代表强匹配"
+    );
+  });
+
+  it("does not call fixture-only data a verified nearby fallback", () => {
+    const fixtureOnly = event("fixture-only", { genres: ["Death metal"] });
+    const selection = buildRecommendationSelection(input(), [fixtureOnly], { now: NOW });
+
+    expect(selection.recommendations).toEqual([]);
+    expect(selection.funnel.fallbackEligible).toBe(0);
+    expect(selection.funnel.fallbackSelected).toBe(0);
+    expect(selection.funnel.rejected.no_preference_affinity).toBe(1);
+  });
+
+  it("always places preference-backed events before higher-scoring fallbacks", () => {
+    const mixedInput = input({
+      genres: [{ name: "Mandopop", weight: "occasional" }],
+      inferredGenres: [{ name: "Rock", percentage: 90, confidence: 1 }],
+      languageMode: "any",
+      languages: []
+    });
+    const preferenceBacked = liveEvent("preference-backed", { genres: ["Mandopop"] });
+    const fallback = liveEvent("high-score-fallback", { genres: ["Rock"] });
+
+    const selection = buildRecommendationSelection(
+      mixedInput,
+      [fallback, preferenceBacked],
+      { now: NOW }
+    );
+
+    expect(selection.recommendations.map((item) => item.canonicalKey)).toEqual([
+      "preference-backed",
+      "high-score-fallback"
+    ]);
+    expect(selection.recommendations[1]?.isFallback).toBe(true);
+    expect(selection.funnel.fallbackSelected).toBe(1);
+  });
+
+  it("never uses structurally unsafe events as fallbacks", () => {
+    const outsideRange = liveEvent("outside-range", {
+      venue: {
+        name: "Far Venue",
+        city: "Los Angeles",
+        region: "CA",
+        coordinates: { latitude: 34.0522, longitude: -118.2437 }
+      }
+    });
+    const inactive = liveEvent("inactive", { status: "cancelled" });
+    const missingCoordinates = liveEvent("missing-coordinates", {
+      venue: { name: "Unknown Venue", city: "Oakland", region: "CA" }
+    });
+
+    expect(buildRecommendations(
+      input(),
+      [outsideRange, inactive, missingCoordinates],
+      { now: NOW }
+    )).toEqual([]);
   });
 
   it("clamps non-finite and fractional result limits", () => {

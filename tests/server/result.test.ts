@@ -47,6 +47,8 @@ describe("deriveDataMode", () => {
       activeNonTribute: 140,
       insideTravelBoundary: 42,
       preferenceEligible: 9,
+      fallbackEligible: 4,
+      fallbackSelected: 1,
       selectedEvents: 7,
       rejected: {
         duplicate_event: 49,

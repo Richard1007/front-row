@@ -458,6 +458,9 @@ function ResultFunnel({ locale, result }: { locale: Locale; result: ValidationRe
         <span><strong>{funnel.inputEvents}</strong>{tr(locale, "rawListings")}</span>
         <span><strong>{funnel.deduplicatedEvents}</strong>{tr(locale, "uniqueEvents")}</span>
         <span><strong>{funnel.preferenceEligible}</strong>{tr(locale, "preferenceEligible")}</span>
+        {funnel.fallbackSelected > 0 && (
+          <span><strong>{funnel.fallbackSelected}</strong>{tr(locale, "fallbackSelected")}</span>
+        )}
         <span><strong>{funnel.selectedEvents}</strong>{tr(locale, "shownResults")}</span>
       </div>
       {rejected.length > 0 && (
@@ -546,25 +549,31 @@ function RecommendationCard({ locale, event, feedback, onFeedback }: {
     <article className="event-card">
       <div className="event-card-topline">
         <span className={`tier-badge tier-${event.tier.toLowerCase()}`}>
-          {event.tier} · {tr(locale, tierLabelKeys[event.tier])}
+          {event.isFallback
+            ? tr(locale, "fallbackBadge")
+            : `${event.tier} · ${tr(locale, tierLabelKeys[event.tier])}`}
         </span>
-        <span className="score-pill" aria-label={tr(locale, "recommendationScore", { score: formatScore(event.score.final) })}>
-          {tr(locale, "points", { score: formatScore(event.score.final) })}
-        </span>
+        {!event.isFallback && (
+          <span className="score-pill" aria-label={tr(locale, "recommendationScore", { score: formatScore(event.score.final) })}>
+            {tr(locale, "points", { score: formatScore(event.score.final) })}
+          </span>
+        )}
       </div>
       <h3>{event.name}</h3>
       <p className="event-reason">{translateServerText(locale, event.reason)}</p>
 
-      <details className="score-details">
-        <summary>{tr(locale, "viewScore")}</summary>
-        <dl>
-          <div><dt>{tr(locale, "artistMatch")}</dt><dd>{scoreValue(event.score.artist, locale)}</dd></div>
-          <div><dt>{tr(locale, "genreMatch")}</dt><dd>{scoreValue(event.score.genre, locale)}</dd></div>
-          <div><dt>{tr(locale, "languageMatch")}</dt><dd>{scoreValue(event.score.language, locale)}</dd></div>
-          <div><dt>{tr(locale, "informationCoverage")}</dt><dd>{formatScore(event.score.coverage)}%</dd></div>
-        </dl>
-        <p>{tr(locale, "scoreExplanation")}</p>
-      </details>
+      {!event.isFallback && (
+        <details className="score-details">
+          <summary>{tr(locale, "viewScore")}</summary>
+          <dl>
+            <div><dt>{tr(locale, "artistMatch")}</dt><dd>{scoreValue(event.score.artist, locale)}</dd></div>
+            <div><dt>{tr(locale, "genreMatch")}</dt><dd>{scoreValue(event.score.genre, locale)}</dd></div>
+            <div><dt>{tr(locale, "languageMatch")}</dt><dd>{scoreValue(event.score.language, locale)}</dd></div>
+            <div><dt>{tr(locale, "informationCoverage")}</dt><dd>{formatScore(event.score.coverage)}%</dd></div>
+          </dl>
+          <p>{tr(locale, "scoreExplanation")}</p>
+        </details>
+      )}
 
       <dl className="event-details">
         <div>

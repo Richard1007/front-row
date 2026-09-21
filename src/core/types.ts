@@ -123,6 +123,8 @@ export interface ScoreBreakdown {
 
 export interface RankedEvent extends NormalizedEvent {
   tier: RecommendationTier;
+  /** True only for a provider-backed nearby event used to keep a sparse list useful. */
+  isFallback?: boolean;
   score: ScoreBreakdown;
   reason: string;
   estimatedTravelMinutes?: number;
@@ -153,6 +155,8 @@ export interface RecommendationFunnel {
   activeNonTribute: number;
   insideTravelBoundary: number;
   preferenceEligible: number;
+  fallbackEligible: number;
+  fallbackSelected: number;
   selectedEvents: number;
   rejected: Record<RecommendationRejectionReason, number>;
 }

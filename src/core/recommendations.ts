@@ -39,6 +39,7 @@ const DEFAULT_RESULT_LIMIT = 9;
 const MAX_RESULT_LIMIT = 9;
 const ABSOLUTE_RESULT_LIMIT = 10;
 const MAX_EXPLORATION_RESULTS = 5;
+const MINIMUM_USEFUL_RESULTS = 3;
 
 export interface RecommendationOptions {
   now?: Date;
@@ -61,8 +62,15 @@ export interface RecommendationSelection {
 export interface RecommendationCandidatePool {
   /** Every deduplicated, date/travel/status/preference-eligible event before list limits. */
   candidates: RankedEvent[];
+  /** Structurally safe live events without enough evidence for a strong preference match. */
+  fallbackCandidates: RankedEvent[];
   funnel: RecommendationFunnel;
   resultLimit: number;
+}
+
+interface RankedCandidate {
+  event: RankedEvent;
+  preferenceEligible: boolean;
 }
 
 interface ExactArtistMatch {
@@ -413,7 +421,7 @@ function rankEvent(
   event: NormalizedEvent,
   now: Date,
   funnel: RecommendationFunnel
-): RankedEvent | undefined {
+): RankedCandidate | undefined {
   if (!eligibleByDate(event, now, input.forecastMonths ?? 4)) {
     funnel.rejected.outside_forecast += 1;
     return undefined;
@@ -471,36 +479,56 @@ function rankEvent(
   // Explicit artists are always eligible. Discovery needs a positive, sourced
   // affinity, but genre/language weights remain soft ranking signals rather
   // than filters that can veto an otherwise relevant event.
-  if (!exact && !hasSourcedArtistSimilarity && !hasGenreAffinity && !hasLanguageAffinity) {
-    funnel.rejected.no_preference_affinity += 1;
-    return undefined;
-  }
-  funnel.preferenceEligible += 1;
+  const preferenceEligible = Boolean(
+    exact || hasSourcedArtistSimilarity || hasGenreAffinity || hasLanguageAffinity
+  );
+  if (preferenceEligible) funnel.preferenceEligible += 1;
 
   const tier = tierFor(event, exact, hasSourcedArtistSimilarity, now);
 
   return {
-    ...event,
-    tier,
-    score: {
-      artist: dimensions.artist?.match,
-      genre: dimensions.genre?.match,
-      language: dimensions.language?.match,
-      coverage: aggregate.coverage,
-      final: aggregate.final
-    },
-    reason: reasonFor(tier, exact, dimensions, event),
-    estimatedTravelMinutes: travel.travelMinutes,
-    distanceMiles: travel.distanceMiles,
-    warnings: warningsFor(event, input)
+    preferenceEligible,
+    event: {
+      ...event,
+      tier: preferenceEligible ? tier : "T3",
+      isFallback: preferenceEligible ? undefined : true,
+      score: {
+        artist: dimensions.artist?.match,
+        genre: dimensions.genre?.match,
+        language: dimensions.language?.match,
+        coverage: aggregate.coverage,
+        final: aggregate.final
+      },
+      reason: preferenceEligible
+        ? reasonFor(tier, exact, dimensions, event)
+        : "在你的出行范围内，作为少量探索推荐",
+      estimatedTravelMinutes: travel.travelMinutes,
+      distanceMiles: travel.distanceMiles,
+      warnings: preferenceEligible
+        ? warningsFor(event, input)
+        : [
+            "没有找到可靠的偏好匹配。这是经过验证的附近演出，不代表强匹配",
+            ...warningsFor(event, input)
+          ]
+    }
   };
 }
 
 function rankedDisplayOrder(left: RankedEvent, right: RankedEvent): number {
+  const fallbackDifference = Number(Boolean(left.isFallback)) - Number(Boolean(right.isFallback));
+  if (fallbackDifference !== 0) return fallbackDifference;
   const tierDifference = TIER_ORDER[left.tier] - TIER_ORDER[right.tier];
   if (tierDifference !== 0) return tierDifference;
   const scoreDifference = right.score.final - left.score.final;
   if (scoreDifference !== 0) return scoreDifference;
+  const dateDifference = Date.parse(left.startAt) - Date.parse(right.startAt);
+  if (dateDifference !== 0) return dateDifference;
+  return left.canonicalKey.localeCompare(right.canonicalKey);
+}
+
+function fallbackDisplayOrder(left: RankedEvent, right: RankedEvent): number {
+  const distanceDifference = (left.distanceMiles ?? Infinity) - (right.distanceMiles ?? Infinity);
+  if (distanceDifference !== 0) return distanceDifference;
   const dateDifference = Date.parse(left.startAt) - Date.parse(right.startAt);
   if (dateDifference !== 0) return dateDifference;
   return left.canonicalKey.localeCompare(right.canonicalKey);
@@ -619,15 +647,27 @@ export function buildRecommendationCandidatePool(
     activeNonTribute: 0,
     insideTravelBoundary: 0,
     preferenceEligible: 0,
+    fallbackEligible: 0,
+    fallbackSelected: 0,
     selectedEvents: 0,
     rejected: emptyRejectedCounts()
   };
   funnel.rejected.duplicate_event = events.length - deduplicatedEvents.length;
 
-  const ranked = deduplicatedEvents
+  const classified = deduplicatedEvents
     .map((event) => rankEvent(enrichedInput, event, now, funnel))
-    .filter((event): event is RankedEvent => Boolean(event))
+    .filter((event): event is RankedCandidate => Boolean(event));
+  const ranked = classified
+    .filter((candidate) => candidate.preferenceEligible)
+    .map((candidate) => candidate.event)
     .sort(rankedDisplayOrder);
+  const weakCandidates = classified.filter((candidate) => !candidate.preferenceEligible);
+  const fallbackCandidates = weakCandidates
+    .filter((candidate) => candidate.event.sources.some((source) => source.mode === "live"))
+    .map((candidate) => candidate.event)
+    .sort(fallbackDisplayOrder);
+  funnel.fallbackEligible = fallbackCandidates.length;
+  funnel.rejected.no_preference_affinity = weakCandidates.length;
 
   const exact = ranked.filter((event) => event.tier === "T0" || event.tier === "T1");
   const exactArtistKeys = new Set(
@@ -646,7 +686,7 @@ export function buildRecommendationCandidatePool(
       ? ABSOLUTE_RESULT_LIMIT
       : normalLimit;
 
-  return { candidates: ranked, funnel, resultLimit: limit };
+  return { candidates: ranked, fallbackCandidates, funnel, resultLimit: limit };
 }
 
 /**
@@ -692,6 +732,23 @@ export function buildRecommendationSelection(
     results.push(event);
     explorationCount += 1;
   }
+
+  // A sparse digest is not useful. If strong matches do not fill three places,
+  // add a few clearly marked, provider-backed nearby events that already passed
+  // date, status, tribute, coordinate, and travel checks.
+  const minimumResults = Math.min(limit, MINIMUM_USEFUL_RESULTS);
+  const fallback = diversifyPerformers(pool.fallbackCandidates);
+  let selectedFallbacks = 0;
+  for (const event of fallback) {
+    if (results.length >= minimumResults) break;
+    results.push(event);
+    selectedFallbacks += 1;
+  }
+  funnel.fallbackSelected = selectedFallbacks;
+  funnel.rejected.no_preference_affinity = Math.max(
+    0,
+    funnel.rejected.no_preference_affinity - selectedFallbacks
+  );
   results.sort(rankedDisplayOrder);
   funnel.selectedEvents = results.length;
   return { recommendations: results, funnel };
