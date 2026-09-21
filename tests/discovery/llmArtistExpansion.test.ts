@@ -48,12 +48,12 @@ describe("LLM artist expansion", () => {
       model: "gpt-6-astra",
       store: false,
       reasoning: { effort: "low" },
-      max_output_tokens: 700,
+      max_output_tokens: 1_600,
       text: { format: { type: "json_schema", strict: true } }
     });
     expect(JSON.stringify(request)).not.toContain("uniqueItems");
     expect(schema.additionalProperties).toBe(false);
-    expect(schema.properties.candidates.maxItems).toBe(8);
+    expect(schema.properties.candidates.maxItems).toBe(20);
     expect(schema.properties.candidates.items.additionalProperties).toBe(false);
     expect(schema.properties.candidates.items.properties.relatedTo.items.enum).toEqual([
       "方大同",
@@ -153,6 +153,20 @@ describe("LLM artist expansion", () => {
     await client.expand(input);
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("coalesces concurrent identical profiles into one billable request", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      await Promise.resolve();
+      return jsonResponse({ output_text: JSON.stringify({ candidates: [] }) });
+    });
+    const client = new LlmArtistExpansionClient({ apiKey: "test-key", fetchImpl });
+
+    const [first, second] = await Promise.all([client.expand(input), client.expand(input)]);
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(first).toMatchObject({ status: "completed", cached: false });
+    expect(second).toMatchObject({ status: "completed", cached: true, estimatedCostUsd: 0 });
   });
 
   it("returns safe diagnostics without making a request when disabled or empty", async () => {

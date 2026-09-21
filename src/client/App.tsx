@@ -1213,6 +1213,39 @@ export default function App() {
                           )}
                         </p>
                       )}
+                      {result.discovery.llmSelection && (
+                        <p>
+                          <strong>{tr(locale, "aiEventSelection")}</strong>
+                          <span>
+                            {tr(
+                              locale,
+                              result.discovery.llmSelection.status === "completed"
+                                ? "aiSelectionCompleted"
+                                : result.discovery.llmSelection.status === "disabled"
+                                  ? "aiSelectionDisabled"
+                                  : "aiSelectionFailed",
+                              { model: result.discovery.llmSelection.model }
+                            )}
+                          </span>
+                          <small>
+                            {result.discovery.llmSelection.selectedEvents > 0
+                              ? tr(locale, "aiSelectedEvents", {
+                                  count: result.discovery.llmSelection.selectedEvents
+                                })
+                              : tr(locale, "aiNoSelectedEvents")}
+                          </small>
+                          {typeof result.discovery.llmSelection.estimatedCostUsd === "number" && (
+                            <small>
+                              {tr(locale, "aiExpansionCost", {
+                                cost: `$${result.discovery.llmSelection.estimatedCostUsd.toFixed(4)}`,
+                                cache: result.discovery.llmSelection.cached
+                                  ? tr(locale, "aiExpansionCached")
+                                  : ""
+                              })}
+                            </small>
+                          )}
+                        </p>
+                      )}
                       {(result.discovery.inferredLanguages?.length || result.discovery.inferredGenres?.length) && (
                         <p>
                           <strong>{tr(locale, "inferredProfile")}</strong>

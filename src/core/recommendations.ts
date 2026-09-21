@@ -620,11 +620,14 @@ function primaryPerformerKey(event: RankedEvent): string {
   return performer.canonicalId ?? normalizedText(performer.name);
 }
 
-/** Preserve quality order while presenting one event per performer first. */
-function diversifyPerformers(events: RankedEvent[]): RankedEvent[] {
+/** Preserve quality order while separating each performer's first show from repeats. */
+function partitionPerformerRepeats(
+  events: RankedEvent[],
+  initiallySeen: ReadonlySet<string> = new Set()
+): { firstByPerformer: RankedEvent[]; repeats: RankedEvent[] } {
   const firstByPerformer: RankedEvent[] = [];
   const repeats: RankedEvent[] = [];
-  const seen = new Set<string>();
+  const seen = new Set(initiallySeen);
   for (const event of events) {
     const key = primaryPerformerKey(event);
     if (seen.has(key)) repeats.push(event);
@@ -633,7 +636,7 @@ function diversifyPerformers(events: RankedEvent[]): RankedEvent[] {
       firstByPerformer.push(event);
     }
   }
-  return [...firstByPerformer, ...repeats];
+  return { firstByPerformer, repeats };
 }
 
 /**
@@ -724,38 +727,58 @@ export function buildRecommendationSelection(
   funnel.rejected.result_limit += exact.length - selectedExact.length;
 
   const results: RankedEvent[] = [...selectedExact];
-  const tierTwo = diversifyPerformers(ranked.filter((event) => event.tier === "T2"));
-  const tierThree = diversifyPerformers(ranked.filter((event) => event.tier === "T3"));
-
-  for (const event of tierTwo) {
-    if (results.length >= limit) {
-      funnel.rejected.result_limit += 1;
-      continue;
-    }
-    results.push(event);
-  }
-
+  const discovery = partitionPerformerRepeats(
+    ranked.filter((event) => event.tier === "T2" || event.tier === "T3")
+  );
   let explorationCount = 0;
-  for (const event of tierThree) {
+  const addDiscovery = (event: RankedEvent): boolean => {
     if (results.length >= limit) {
       funnel.rejected.result_limit += 1;
-      continue;
+      return false;
     }
-    if (explorationCount >= MAX_EXPLORATION_RESULTS) {
+    if (event.tier === "T3" && explorationCount >= MAX_EXPLORATION_RESULTS) {
       funnel.rejected.exploration_cap += 1;
-      continue;
+      return false;
     }
     results.push(event);
-    explorationCount += 1;
+    if (event.tier === "T3") explorationCount += 1;
+    return true;
+  };
+
+  // Strong discovery results first represent each performer only once. Repeat
+  // dates are deferred so a single touring artist cannot crowd out a more
+  // useful nearby shortlist.
+  for (const event of discovery.firstByPerformer) {
+    addDiscovery(event);
   }
 
   // A sparse digest is not useful. If strong matches do not fill three places,
-  // add a few clearly marked, provider-backed nearby events that already passed
-  // date, status, tribute, coordinate, and travel checks.
+  // prefer verified nearby events from different performers before allowing a
+  // second date from the same discovery performer.
   const minimumResults = Math.min(limit, MINIMUM_USEFUL_RESULTS);
-  const fallback = diversifyPerformers(pool.fallbackCandidates);
+  const selectedPerformerKeys = new Set(results.map(primaryPerformerKey));
+  const fallback = partitionPerformerRepeats(
+    pool.fallbackCandidates,
+    selectedPerformerKeys
+  );
   let selectedFallbacks = 0;
-  for (const event of fallback) {
+  for (const event of fallback.firstByPerformer) {
+    if (results.length >= minimumResults) break;
+    results.push(event);
+    selectedPerformerKeys.add(primaryPerformerKey(event));
+    selectedFallbacks += 1;
+  }
+
+  // Only use repeated discovery dates when distinct, verified nearby options
+  // still cannot produce the minimum useful digest.
+  for (const event of discovery.repeats) {
+    if (results.length >= minimumResults) break;
+    addDiscovery(event);
+  }
+
+  // A repeated fallback is the final safe option when the regional catalog is
+  // itself concentrated around one performer.
+  for (const event of fallback.repeats) {
     if (results.length >= minimumResults) break;
     results.push(event);
     selectedFallbacks += 1;

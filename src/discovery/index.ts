@@ -6,4 +6,5 @@ export * from "./inferArtistGenres.js";
 export * from "./inferArtistLanguages.js";
 export * from "./listenbrainz.js";
 export * from "./llmArtistExpansion.js";
+export * from "./llmEventSelection.js";
 export * from "./musicbrainz.js";

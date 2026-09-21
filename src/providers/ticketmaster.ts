@@ -12,8 +12,10 @@ import {
   canonicalEventKey,
   coordinates,
   deduplicateProviderEvents,
+  distributeProviderBudget,
   encodeGeohash,
   fallbackArtistQueryName,
+  forecastTimeBuckets,
   inactiveStatusFromEventTitle,
   isRecoverableProviderError,
   mapEventStatus,
@@ -32,7 +34,14 @@ interface TicketmasterQuery {
   keyword?: string;
   fallbackKeyword?: string;
   explicit: boolean;
+  startAt?: Date;
+  endAt?: Date;
+  size?: number;
+  sort?: "date,asc" | "relevance,desc";
 }
+
+const REGIONAL_EVENT_BUDGET = 150;
+const MAX_DISCOVERY_ARTISTS = 8;
 
 export interface TicketmasterProviderOptions extends ProviderDependencies {
   apiKey?: string;
@@ -102,7 +111,7 @@ export class TicketmasterProvider implements EventProvider {
       };
     });
     const discoveryQueries: TicketmasterQuery[] = (input.discoveryArtists ?? [])
-      .slice(0, 12)
+      .slice(0, MAX_DISCOVERY_ARTISTS)
       .map((artist) => {
         const profile = findArtistProfile(artist.name, artist.canonicalId) ??
           artist.aliases?.map((alias) => findArtistProfile(alias)).find(Boolean);
@@ -111,12 +120,26 @@ export class TicketmasterProvider implements EventProvider {
           ? { attractionId, explicit: false }
           : { keyword: preferredArtistQueryName(artist), explicit: false };
       });
-    // Exact artist queries protect recall. The final un-keyworded regional query
-    // supplies discovery candidates for genre/language scoring.
+    const regionalBuckets = forecastTimeBuckets(now, input.forecastMonths, 6);
+    const regionalSizes = distributeProviderBudget(
+      REGIONAL_EVENT_BUDGET,
+      regionalBuckets.length,
+    );
+    const regionalQueries: TicketmasterQuery[] = regionalBuckets.map(
+      (bucket, index) => ({
+        explicit: false,
+        startAt: bucket.start,
+        endAt: bucket.end,
+        size: regionalSizes[index],
+        sort: "relevance,desc",
+      }),
+    );
+    // Exact artist queries protect recall. Time-stratified regional queries
+    // cover the entire horizon instead of spending the budget on its first week.
     const queries: TicketmasterQuery[] = [
       ...explicitQueries,
       ...discoveryQueries,
-      { explicit: false },
+      ...regionalQueries,
     ];
     const allEvents: NormalizedEvent[] = [];
     const errors: Error[] = [];
@@ -124,7 +147,10 @@ export class TicketmasterProvider implements EventProvider {
 
     let requestCount = 0;
     const requestQuery = async (
-      query: Pick<TicketmasterQuery, "attractionId" | "keyword">,
+      query: Pick<
+        TicketmasterQuery,
+        "attractionId" | "keyword" | "startAt" | "endAt" | "size" | "sort"
+      >,
     ): Promise<{ events: NormalizedEvent[]; rawEventCount: number }> => {
       if (requestCount > 0 && this.minRequestIntervalMs > 0) {
         await delay(this.minRequestIntervalMs);
@@ -133,14 +159,16 @@ export class TicketmasterProvider implements EventProvider {
       const params = new URLSearchParams({
         apikey: apiKey,
         classificationName: "Music",
-        startDateTime: ticketmasterDateTime(now),
-        endDateTime: ticketmasterDateTime(forecastEnd(now, input.forecastMonths)),
+        startDateTime: ticketmasterDateTime(query.startAt ?? now),
+        endDateTime: ticketmasterDateTime(
+          query.endAt ?? forecastEnd(now, input.forecastMonths),
+        ),
         geoPoint: encodeGeohash(input.origin),
         radius: String(candidateRadiusMiles(input.maxTravelMinutes)),
         unit: "miles",
-        size: "100",
+        size: String(query.size ?? 100),
         page: "0",
-        sort: "date,asc",
+        sort: query.sort ?? "date,asc",
         includeTBA: "no",
         includeTBD: "no",
         locale: "*",

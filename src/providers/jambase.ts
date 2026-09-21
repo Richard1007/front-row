@@ -12,7 +12,9 @@ import {
   canonicalEventKey,
   coordinates,
   deduplicateProviderEvents,
+  distributeProviderBudget,
   fallbackArtistQueryName,
+  forecastTimeBuckets,
   inactiveStatusFromEventTitle,
   isRecoverableProviderError,
   mapEventStatus,
@@ -30,6 +32,10 @@ interface JamBaseQuery {
   fallbackName?: string;
   explicit: boolean;
 }
+
+const REGIONAL_EVENT_BUDGET = 50;
+const MAX_REGIONAL_BUCKETS = 2;
+const MAX_DISCOVERY_ARTISTS = 8;
 
 export interface JamBaseProviderOptions extends ProviderDependencies {
   apiKey?: string;
@@ -78,15 +84,18 @@ export class JamBaseProvider implements EventProvider {
     }
 
     const now = this.now();
-    const commonParams: Record<string, string> = {
-      eventDateFrom: isoDate(now),
-      eventDateTo: isoDate(forecastEnd(now, input.forecastMonths)),
+    const baseParams: Record<string, string> = {
       geoLatitude: String(input.origin.latitude),
       geoLongitude: String(input.origin.longitude),
       geoRadiusAmount: String(candidateRadiusMiles(input.maxTravelMinutes)),
       geoRadiusUnits: "mi",
-      perPage: "100",
       page: "1",
+    };
+    const commonParams: Record<string, string> = {
+      ...baseParams,
+      eventDateFrom: isoDate(now),
+      eventDateTo: isoDate(forecastEnd(now, input.forecastMonths)),
+      perPage: "100",
     };
     const explicitQueries: JamBaseQuery[] = input.artists.map((artist) => {
       const profile = findArtistProfile(artist.name, artist.canonicalId) ??
@@ -107,25 +116,67 @@ export class JamBaseProvider implements EventProvider {
         explicit: true,
       };
     });
-    const discoveryQueries: JamBaseQuery[] = (input.discoveryArtists ?? [])
-      .slice(0, 12)
-      .map((artist) => {
+    const discoveryArtists = (input.discoveryArtists ?? [])
+      .slice(0, MAX_DISCOVERY_ARTISTS);
+    const discoveryIds = discoveryArtists.flatMap((artist) => {
         const profile = findArtistProfile(artist.name, artist.canonicalId) ??
           artist.aliases?.map((alias) => findArtistProfile(alias)).find(Boolean);
         const artistId = profile?.providerIds?.jambase;
-        return {
-          params: new URLSearchParams(
-            artistId
-              ? { ...commonParams, artistId }
-              : { ...commonParams, artistName: preferredArtistQueryName(artist) },
-          ),
-          explicit: false,
-        };
+        return artistId ? [artistId] : [];
       });
+    // JamBase also accepts pipe-delimited IDs. Explicit preferences stay
+    // separate, while non-explicit discovery candidates share one request.
+    const discoveryIdQueries: JamBaseQuery[] = discoveryIds.length > 0
+      ? [{
+          params: new URLSearchParams({
+            ...commonParams,
+            artistId: discoveryIds.join("|"),
+          }),
+          explicit: false,
+        }]
+      : [];
+    const discoveryNames = discoveryArtists.flatMap((artist) => {
+      const profile = findArtistProfile(artist.name, artist.canonicalId) ??
+        artist.aliases?.map((alias) => findArtistProfile(alias)).find(Boolean);
+      return profile?.providerIds?.jambase
+        ? []
+        : [preferredArtistQueryName(artist)];
+    });
+    // JamBase officially supports pipe-delimited artistName filters. Batch
+    // unresolved discovery names to conserve the small pilot request quota.
+    const discoveryNameQueries: JamBaseQuery[] = discoveryNames.length > 0
+      ? [{
+          params: new URLSearchParams({
+            ...commonParams,
+            artistName: discoveryNames.join("|"),
+          }),
+          explicit: false,
+        }]
+      : [];
+    const regionalBuckets = forecastTimeBuckets(
+      now,
+      input.forecastMonths,
+      MAX_REGIONAL_BUCKETS,
+    );
+    const regionalSizes = distributeProviderBudget(
+      REGIONAL_EVENT_BUDGET,
+      regionalBuckets.length,
+    );
+    const regionalQueries: JamBaseQuery[] = regionalBuckets.map((bucket, index) => ({
+      params: new URLSearchParams({
+        ...baseParams,
+        eventDateFrom: isoDate(bucket.start),
+        eventDateTo: isoDate(bucket.end),
+        perPage: String(regionalSizes[index]),
+        sort: "eventDate",
+      }),
+      explicit: false,
+    }));
     const queries: JamBaseQuery[] = [
       ...explicitQueries,
-      ...discoveryQueries,
-      { params: new URLSearchParams(commonParams), explicit: false },
+      ...discoveryIdQueries,
+      ...discoveryNameQueries,
+      ...regionalQueries,
     ];
 
     const allEvents: NormalizedEvent[] = [];

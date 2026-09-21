@@ -642,6 +642,90 @@ describe("buildRecommendations", () => {
     expect(new Set(result.map((item) => item.performers[0]?.canonicalId)).size).toBe(4);
   });
 
+  it("prefers distinct verified nearby performers over a second discovery date", () => {
+    const similarity = [{
+      preferenceCanonicalId: "artist:leehom",
+      score: 0.8,
+      confidence: 0.9,
+      source: "listenbrainz" as const
+    }];
+    const brunoShows = [
+      event("bruno-first", {
+        startAt: "2026-10-10T03:00:00.000Z",
+        performers: [{
+          name: "Bruno Mars",
+          canonicalId: "artist:bruno",
+          similarTo: similarity
+        }]
+      }),
+      event("bruno-second", {
+        startAt: "2026-10-11T03:00:00.000Z",
+        performers: [{
+          name: "Bruno Mars",
+          canonicalId: "artist:bruno",
+          similarTo: similarity
+        }]
+      })
+    ];
+    const nearby = [
+      liveEvent("nearby-a", {
+        performers: [{ name: "Nearby Artist A", canonicalId: "artist:nearby-a" }]
+      }),
+      liveEvent("nearby-b", {
+        performers: [{ name: "Nearby Artist B", canonicalId: "artist:nearby-b" }]
+      })
+    ];
+
+    const result = buildRecommendations(input(), [...brunoShows, ...nearby], { now: NOW });
+
+    expect(result.map((item) => item.canonicalKey)).toEqual([
+      "bruno-first",
+      "nearby-a",
+      "nearby-b"
+    ]);
+    expect(result.filter((item) => item.performers[0]?.canonicalId === "artist:bruno"))
+      .toHaveLength(1);
+  });
+
+  it("uses a repeated discovery date only when distinct fallbacks cannot reach three", () => {
+    const similarity = [{
+      preferenceCanonicalId: "artist:leehom",
+      score: 0.8,
+      confidence: 0.9,
+      source: "listenbrainz" as const
+    }];
+    const brunoShows = [
+      event("bruno-primary", {
+        startAt: "2026-10-10T03:00:00.000Z",
+        performers: [{
+          name: "Bruno Mars",
+          canonicalId: "artist:bruno",
+          similarTo: similarity
+        }]
+      }),
+      event("bruno-repeat", {
+        startAt: "2026-10-11T03:00:00.000Z",
+        performers: [{
+          name: "Bruno Mars",
+          canonicalId: "artist:bruno",
+          similarTo: similarity
+        }]
+      })
+    ];
+    const nearby = liveEvent("only-nearby", {
+      performers: [{ name: "Nearby Artist", canonicalId: "artist:nearby" }]
+    });
+
+    const result = buildRecommendations(input(), [...brunoShows, nearby], { now: NOW });
+
+    expect(result.map((item) => item.canonicalKey)).toEqual([
+      "bruno-primary",
+      "bruno-repeat",
+      "only-nearby"
+    ]);
+    expect(result.find((item) => item.canonicalKey === "only-nearby")?.isFallback).toBe(true);
+  });
+
   it("accepts T3 with reliable genre or language affinity alone", () => {
     const genreOnly = event("genre-only", { genres: ["Mandopop"] });
     const languageOnly = event("language-only", {

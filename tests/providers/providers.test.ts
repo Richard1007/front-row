@@ -67,7 +67,7 @@ describe("provider contract", () => {
 
     const events = await provider.fetchEvents({ ...input, forecastMonths: 6 });
 
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(8);
     const firstUrl = new URL(String(fetcher.mock.calls[0]?.[0]));
     expect(firstUrl.origin + firstUrl.pathname).toBe(
       "https://app.ticketmaster.com/discovery/v2/events.json",
@@ -79,9 +79,26 @@ describe("provider contract", () => {
     expect(firstUrl.searchParams.get("endDateTime")).toBe("2027-03-19T18:00:00Z");
     expect(firstUrl.searchParams.get("radius")).toBe("90");
     expect(firstUrl.searchParams.get("geoPoint")).toMatch(/^[0-9b-hjkmnp-z]{9}$/);
-    const regionalUrl = new URL(String(fetcher.mock.calls[2]?.[0]));
-    expect(regionalUrl.searchParams.has("attractionId")).toBe(false);
-    expect(regionalUrl.searchParams.has("keyword")).toBe(false);
+    const regionalUrls = fetcher.mock.calls.slice(2).map(
+      ([request]) => new URL(String(request)),
+    );
+    expect(regionalUrls).toHaveLength(6);
+    expect(regionalUrls.every((url) => !url.searchParams.has("attractionId"))).toBe(true);
+    expect(regionalUrls.every((url) => !url.searchParams.has("keyword"))).toBe(true);
+    expect(regionalUrls.every((url) => url.searchParams.get("sort") === "relevance,desc")).toBe(true);
+    expect(regionalUrls.map((url) => Number(url.searchParams.get("size"))))
+      .toEqual([25, 25, 25, 25, 25, 25]);
+    expect(regionalUrls.map((url) => [
+      url.searchParams.get("startDateTime"),
+      url.searchParams.get("endDateTime"),
+    ])).toEqual([
+      ["2026-09-19T18:00:00Z", "2026-10-19T18:00:00Z"],
+      ["2026-10-19T18:00:00Z", "2026-11-19T18:00:00Z"],
+      ["2026-11-19T18:00:00Z", "2026-12-19T18:00:00Z"],
+      ["2026-12-19T18:00:00Z", "2027-01-19T18:00:00Z"],
+      ["2027-01-19T18:00:00Z", "2027-02-19T18:00:00Z"],
+      ["2027-02-19T18:00:00Z", "2027-03-19T18:00:00Z"],
+    ]);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       status: "active",
@@ -109,7 +126,7 @@ describe("provider contract", () => {
 
     const events = await provider.fetchEvents(input);
 
-    expect(fetcher).toHaveBeenCalledTimes(4);
+    expect(fetcher).toHaveBeenCalledTimes(7);
     const fallbackUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
     expect(fallbackUrl.searchParams.get("keyword")).toBe("Wang Leehom");
     expect(events).toHaveLength(1);
@@ -132,7 +149,7 @@ describe("provider contract", () => {
 
     const events = await provider.fetchEvents(explicitOnly);
 
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(6);
     const primaryUrl = new URL(String(fetcher.mock.calls[0]?.[0]));
     const fallbackUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
     expect(primaryUrl.searchParams.get("attractionId")).toBe("K8vZ9173-Uf");
@@ -158,12 +175,12 @@ describe("provider contract", () => {
 
     await provider.fetchEvents(manyAliasInput);
 
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(6);
     expect(
       fetcher.mock.calls.map(([request]) =>
         new URL(String(request)).searchParams.get("keyword"),
       ),
-    ).toEqual(["Alias 1", "Alias 2", null]);
+    ).toEqual(["Alias 1", "Alias 2", null, null, null, null]);
   });
 
   it("does not fan out aliases for discovery artists", async () => {
@@ -197,12 +214,47 @@ describe("provider contract", () => {
 
     await provider.fetchEvents(discoveryInput);
 
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(5);
     expect(
       fetcher.mock.calls.map(([request]) =>
         new URL(String(request)).searchParams.get("keyword"),
       ),
-    ).toEqual(["Discovery 1", null]);
+    ).toEqual(["Discovery 1", null, null, null, null]);
+  });
+
+  it("caps Ticketmaster discovery fan-out at eight artists", async () => {
+    const discoveryInput: ValidationInput = {
+      ...input,
+      artists: [],
+      discoveryArtists: Array.from({ length: 12 }, (_, index) => ({
+        name: `Candidate ${index + 1}`,
+        canonicalId: `musicbrainz:candidate-${index + 1}`,
+        musicBrainzId: `candidate-${index + 1}`,
+        evidence: [{
+          source: "listenbrainz" as const,
+          seedName: "Seed Artist",
+          seedWeight: "priority" as const,
+          rank: index + 1,
+        }],
+      })),
+    };
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({}));
+    const provider = new TicketmasterProvider({
+      apiKey: "tm_test_secret",
+      fetch: fetcher,
+      now: () => NOW,
+      minRequestIntervalMs: 0,
+    });
+
+    await provider.fetchEvents(discoveryInput);
+
+    const artistQueries = fetcher.mock.calls
+      .map(([request]) => new URL(String(request)))
+      .filter((url) => url.searchParams.has("keyword"));
+    expect(artistQueries).toHaveLength(8);
+    expect(artistQueries.map((url) => url.searchParams.get("keyword"))).toEqual(
+      Array.from({ length: 8 }, (_, index) => `Candidate ${index + 1}`),
+    );
   });
 
   it("uses JamBase v3 Bearer auth, User-Agent, and compatible filters", async () => {
@@ -218,7 +270,7 @@ describe("provider contract", () => {
 
     const events = await provider.fetchEvents({ ...input, forecastMonths: 6 });
 
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(4);
     const [rawUrl, init] = fetcher.mock.calls[0] ?? [];
     const url = new URL(String(rawUrl));
     expect(url.origin + url.pathname).toBe("https://api.data.jambase.com/v3/events");
@@ -231,9 +283,23 @@ describe("provider contract", () => {
     expect(url.searchParams.get("geoRadiusAmount")).toBe("90");
     const secondArtistUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
     expect(secondArtistUrl.searchParams.get("artistId")).toBe("jambase:276337");
-    const regionalUrl = new URL(String(fetcher.mock.calls[2]?.[0]));
-    expect(regionalUrl.searchParams.has("artistId")).toBe(false);
-    expect(regionalUrl.searchParams.has("artistName")).toBe(false);
+    const regionalUrls = fetcher.mock.calls.slice(2).map(
+      ([request]) => new URL(String(request)),
+    );
+    expect(regionalUrls).toHaveLength(2);
+    expect(regionalUrls.every((url) => !url.searchParams.has("artistId"))).toBe(true);
+    expect(regionalUrls.every((url) => !url.searchParams.has("artistName"))).toBe(true);
+    expect(regionalUrls.map((url) => Number(url.searchParams.get("perPage"))))
+      .toEqual([25, 25]);
+    expect(regionalUrls.map((url) => url.searchParams.get("sort")))
+      .toEqual(["eventDate", "eventDate"]);
+    expect(regionalUrls.map((url) => [
+      url.searchParams.get("eventDateFrom"),
+      url.searchParams.get("eventDateTo"),
+    ])).toEqual([
+      ["2026-09-19", "2026-12-19"],
+      ["2026-12-19", "2027-03-19"],
+    ]);
     const headers = new Headers(init?.headers);
     expect(headers.get("Authorization")).toBe("Bearer jbd_test_secret");
     expect(headers.get("User-Agent")).toBe("FrontRow-Test/1.0");
@@ -263,7 +329,7 @@ describe("provider contract", () => {
 
     const events = await provider.fetchEvents(input);
 
-    expect(fetcher).toHaveBeenCalledTimes(4);
+    expect(fetcher).toHaveBeenCalledTimes(5);
     const fallbackUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
     expect(fallbackUrl.searchParams.get("artistName")).toBe("Wang Leehom");
     expect(events).toHaveLength(1);
@@ -289,7 +355,7 @@ describe("provider contract", () => {
 
     const events = await provider.fetchEvents(chineseArtistInput);
 
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(4);
     const primaryUrl = new URL(String(fetcher.mock.calls[0]?.[0]));
     const fallbackUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
     expect(primaryUrl.searchParams.get("artistName")).toBe("万能青年旅店");
@@ -297,6 +363,84 @@ describe("provider contract", () => {
       "Omnipotent Youth Society",
     );
     expect(events).toHaveLength(1);
+  });
+
+  it("batches at most eight JamBase discovery artist names into one request", async () => {
+    const discoveryInput: ValidationInput = {
+      ...input,
+      artists: [],
+      discoveryArtists: Array.from({ length: 12 }, (_, index) => ({
+        name: `Candidate ${index + 1}`,
+        canonicalId: `musicbrainz:candidate-${index + 1}`,
+        musicBrainzId: `candidate-${index + 1}`,
+        evidence: [{
+          source: "listenbrainz" as const,
+          seedName: "Seed Artist",
+          seedWeight: "priority" as const,
+          rank: index + 1,
+        }],
+      })),
+    };
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ events: [] }));
+    const provider = new JamBaseProvider({
+      apiKey: "jbd_test_secret",
+      fetch: fetcher,
+      now: () => NOW,
+    });
+
+    await provider.fetchEvents(discoveryInput);
+
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    const discoveryUrl = new URL(String(fetcher.mock.calls[0]?.[0]));
+    expect(discoveryUrl.searchParams.get("artistName")).toBe(
+      Array.from({ length: 8 }, (_, index) => `Candidate ${index + 1}`).join("|"),
+    );
+    const regionalUrls = fetcher.mock.calls.slice(1).map(
+      ([request]) => new URL(String(request)),
+    );
+    expect(regionalUrls.every((url) => !url.searchParams.has("artistName"))).toBe(true);
+  });
+
+  it("batches known JamBase discovery artist IDs while keeping explicit artists separate", async () => {
+    const discoveryInput: ValidationInput = {
+      ...input,
+      artists: [{ name: "王力宏", weight: "priority" }],
+      discoveryArtists: [
+        {
+          name: "王力宏",
+          canonicalId: "wang-leehom",
+          musicBrainzId: "wang-leehom",
+          evidence: [],
+        },
+        {
+          name: "Bruno Mars",
+          canonicalId: "bruno-mars",
+          musicBrainzId: "bruno-mars",
+          evidence: [],
+        },
+      ],
+    };
+    const fetcher = vi.fn<typeof fetch>(async (request) => {
+      const url = new URL(String(request));
+      return url.searchParams.get("artistId") === "jambase:5911976"
+        ? jsonResponse(jambaseResponse)
+        : jsonResponse({ events: [] });
+    });
+    const provider = new JamBaseProvider({
+      apiKey: "jbd_test_secret",
+      fetch: fetcher,
+      now: () => NOW,
+    });
+
+    await provider.fetchEvents(discoveryInput);
+
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    const explicitUrl = new URL(String(fetcher.mock.calls[0]?.[0]));
+    const discoveryUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
+    expect(explicitUrl.searchParams.get("artistId")).toBe("jambase:5911976");
+    expect(discoveryUrl.searchParams.get("artistId")).toBe(
+      "jambase:5911976|jambase:276337",
+    );
   });
 
   it("marks explicit postponed and cancelled title listings inactive", () => {
