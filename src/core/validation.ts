@@ -63,17 +63,14 @@ export const validationInputSchema = z
       longitude: z.number().finite().min(-180).max(180)
     }),
     maxTravelMinutes: z.number().int().min(15).max(360),
-    forecastMonths: z.number().int().default(4)
+    forecastMonths: z
+      .number()
+      .int("未来月数必须是整数")
+      .min(1, "未来月数最少为 1 个月")
+      .max(6, "未来月数最多为 6 个月")
+      .default(4)
   })
   .superRefine((value, context) => {
-    if (value.forecastMonths !== 4) {
-      context.addIssue({
-        code: "custom",
-        path: ["forecastMonths"],
-        message: "Milestone 0 固定搜索未来四个月"
-      });
-    }
-
     if (containsDuplicates(value.artists.map(artistIdentityKey))) {
       context.addIssue({
         code: "custom",

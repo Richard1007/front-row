@@ -1,8 +1,9 @@
 export const DEFAULT_FORECAST_MONTHS = 4;
+export const MAX_FORECAST_MONTHS = 6;
 
 export function forecastMonths(value?: number): number {
   if (!Number.isFinite(value)) return DEFAULT_FORECAST_MONTHS;
-  return Math.max(1, Math.min(DEFAULT_FORECAST_MONTHS, Math.floor(value!)));
+  return Math.max(1, Math.min(MAX_FORECAST_MONTHS, Math.floor(value!)));
 }
 
 /** Product semantics are calendar months, not a fixed number of elapsed days. */

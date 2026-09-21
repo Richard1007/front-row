@@ -65,7 +65,7 @@ describe("provider contract", () => {
       minRequestIntervalMs: 0,
     });
 
-    const events = await provider.fetchEvents(input);
+    const events = await provider.fetchEvents({ ...input, forecastMonths: 6 });
 
     expect(fetcher).toHaveBeenCalledTimes(3);
     const firstUrl = new URL(String(fetcher.mock.calls[0]?.[0]));
@@ -76,7 +76,7 @@ describe("provider contract", () => {
     expect(firstUrl.searchParams.has("keyword")).toBe(false);
     expect(firstUrl.searchParams.get("classificationName")).toBe("Music");
     expect(firstUrl.searchParams.get("startDateTime")).toBe("2026-09-19T18:00:00Z");
-    expect(firstUrl.searchParams.get("endDateTime")).toBe("2027-01-19T18:00:00Z");
+    expect(firstUrl.searchParams.get("endDateTime")).toBe("2027-03-19T18:00:00Z");
     expect(firstUrl.searchParams.get("radius")).toBe("90");
     expect(firstUrl.searchParams.get("geoPoint")).toMatch(/^[0-9b-hjkmnp-z]{9}$/);
     const regionalUrl = new URL(String(fetcher.mock.calls[2]?.[0]));
@@ -216,7 +216,7 @@ describe("provider contract", () => {
       userAgent: "FrontRow-Test/1.0",
     });
 
-    const events = await provider.fetchEvents(input);
+    const events = await provider.fetchEvents({ ...input, forecastMonths: 6 });
 
     expect(fetcher).toHaveBeenCalledTimes(3);
     const [rawUrl, init] = fetcher.mock.calls[0] ?? [];
@@ -225,7 +225,7 @@ describe("provider contract", () => {
     expect(url.searchParams.get("artistId")).toBe("jambase:5911976");
     expect(url.searchParams.has("artistName")).toBe(false);
     expect(url.searchParams.get("eventDateFrom")).toBe("2026-09-19");
-    expect(url.searchParams.get("eventDateTo")).toBe("2027-01-19");
+    expect(url.searchParams.get("eventDateTo")).toBe("2027-03-19");
     expect(url.searchParams.get("geoLatitude")).toBe("37.8044");
     expect(url.searchParams.get("geoLongitude")).toBe("-122.2712");
     expect(url.searchParams.get("geoRadiusAmount")).toBe("90");

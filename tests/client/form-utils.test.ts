@@ -20,7 +20,8 @@ const validState = (): ValidationFormState => ({
   originLabel: "Oakland, California, United States",
   latitude: "37.8044",
   longitude: "-122.2712",
-  maxTravelMinutes: "120"
+  maxTravelMinutes: "120",
+  forecastMonths: "4"
 });
 
 describe("validateForm", () => {
@@ -71,6 +72,13 @@ describe("validateForm", () => {
     expect(errors.maxTravelMinutes).toBeTruthy();
   });
 
+  it("checks the one-to-six-month forecast boundary", () => {
+    const state = validState();
+    state.forecastMonths = "7";
+    expect(validateForm(state, "en").forecastMonths)
+      .toBe("Choose a time window from 1 to 6 months.");
+  });
+
   it("rejects music styles that are not in the controlled list", () => {
     const state = validState();
     state.genres = [{ id: "genre-1", name: "Anything typed by a user", weight: "like" }];
@@ -118,6 +126,12 @@ describe("toValidationInput", () => {
     const state = validState();
     state.languageMode = "any";
     expect(toValidationInput(state).languages).toEqual([]);
+  });
+
+  it("sends the selected forecast window", () => {
+    const state = validState();
+    state.forecastMonths = "6";
+    expect(toValidationInput(state).forecastMonths).toBe(6);
   });
 
   it("splits three selected languages to exactly 100 percent", () => {

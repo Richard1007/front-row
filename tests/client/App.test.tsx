@@ -39,6 +39,18 @@ describe("simple preference form", () => {
     expect(screen.queryByLabelText("Longitude")).toBeNull();
   });
 
+  it("lets the user choose a one-to-six-month search window", () => {
+    render(<App />);
+
+    const select = screen.getByLabelText("How far ahead") as HTMLSelectElement;
+    expect(select.value).toBe("4");
+    expect(within(select).getAllByRole("option")).toHaveLength(6);
+
+    fireEvent.change(select, { target: { value: "6" } });
+    expect(select.value).toBe("6");
+    expect(screen.getByText("Ready to search the next 6 months")).toBeTruthy();
+  });
+
   it("limits categorical language selection to three", () => {
     render(<App />);
 

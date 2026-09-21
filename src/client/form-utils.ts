@@ -33,6 +33,7 @@ export interface ValidationFormState {
   latitude: string;
   longitude: string;
   maxTravelMinutes: string;
+  forecastMonths: string;
 }
 
 export type FormErrors = Partial<
@@ -43,7 +44,8 @@ export type FormErrors = Partial<
     | "originLabel"
     | "latitude"
     | "longitude"
-    | "maxTravelMinutes",
+    | "maxTravelMinutes"
+    | "forecastMonths",
     string
   >
 >;
@@ -82,6 +84,7 @@ export function validateForm(state: ValidationFormState, locale: Locale = "zh"):
   const latitude = parseRequiredNumber(state.latitude);
   const longitude = parseRequiredNumber(state.longitude);
   const travelMinutes = parseRequiredNumber(state.maxTravelMinutes);
+  const forecastMonths = parseRequiredNumber(state.forecastMonths);
 
   if (artists.length === 0) {
     errors.artists = tr(locale, "formArtistRequired");
@@ -119,6 +122,13 @@ export function validateForm(state: ValidationFormState, locale: Locale = "zh"):
   if (!Number.isFinite(travelMinutes) || travelMinutes < 15 || travelMinutes > 360) {
     errors.maxTravelMinutes = tr(locale, "formTravel");
   }
+  if (
+    !Number.isInteger(forecastMonths) ||
+    forecastMonths < 1 ||
+    forecastMonths > 6
+  ) {
+    errors.forecastMonths = tr(locale, "formForecastMonths");
+  }
 
   return errors;
 }
@@ -135,6 +145,6 @@ export function toValidationInput(state: ValidationFormState): ValidationInput {
       longitude: parseRequiredNumber(state.longitude)
     },
     maxTravelMinutes: parseRequiredNumber(state.maxTravelMinutes),
-    forecastMonths: 4
+    forecastMonths: parseRequiredNumber(state.forecastMonths)
   };
 }

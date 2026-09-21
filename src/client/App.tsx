@@ -58,7 +58,8 @@ function createInitialState(locale: Locale): ValidationFormState {
     originLabel: "",
     latitude: "",
     longitude: "",
-    maxTravelMinutes: "120"
+    maxTravelMinutes: "120",
+    forecastMonths: "4"
   };
 }
 
@@ -79,7 +80,8 @@ function createOaklandExample(locale: Locale): ValidationFormState {
     originLabel: "Oakland, California, United States",
     latitude: "37.8044",
     longitude: "-122.2712",
-    maxTravelMinutes: "120"
+    maxTravelMinutes: "120",
+    forecastMonths: "4"
   };
 }
 
@@ -529,7 +531,8 @@ function formErrorsFromApiIssues(issues: ApiIssue[], locale: Locale): FormErrors
       field === "originLabel" ||
       field === "latitude" ||
       field === "longitude" ||
-      field === "maxTravelMinutes"
+      field === "maxTravelMinutes" ||
+      field === "forecastMonths"
     ) {
       next[field] ??= translateServerText(locale, issue.message);
     }
@@ -897,7 +900,7 @@ export default function App() {
             </button>
           </div>
           <div className="hero-ornament" aria-hidden="true">
-            <span>4</span>
+            <span>{form.forecastMonths}</span>
             <small>{tr(locale, "monthsAhead")}</small>
           </div>
         </section>
@@ -1058,11 +1061,36 @@ export default function App() {
                 </select>
                 {errors.maxTravelMinutes && <p className="field-error" id="travel-time-error">{errors.maxTravelMinutes}</p>}
               </div>
+
+              <div className="field-stack travel-field">
+                <label htmlFor="forecast-months">{tr(locale, "forecastWindow")}</label>
+                <select
+                  id="forecast-months"
+                  value={form.forecastMonths}
+                  onChange={(event) => setForm((current) => ({ ...current, forecastMonths: event.target.value }))}
+                  aria-invalid={Boolean(errors.forecastMonths)}
+                  aria-describedby={errors.forecastMonths ? "forecast-months-error" : "forecast-months-note"}
+                >
+                  {[1, 2, 3, 4, 5, 6].map((months) => (
+                    <option value={months} key={months}>
+                      {months === 1
+                        ? tr(locale, "oneMonth")
+                        : tr(locale, "monthCount", { months })}
+                    </option>
+                  ))}
+                </select>
+                <p className="field-note" id="forecast-months-note">{tr(locale, "forecastWindowHint")}</p>
+                {errors.forecastMonths && <p className="field-error" id="forecast-months-error">{errors.forecastMonths}</p>}
+              </div>
             </section>
 
             <div className="submit-panel">
               <div>
-                <strong>{tr(locale, "readyFourMonths")}</strong>
+                <strong>
+                  {form.forecastMonths === "1"
+                    ? tr(locale, "readyOneMonth")
+                    : tr(locale, "readyMonths", { months: form.forecastMonths })}
+                </strong>
                 <p>
                   {tr(locale, "preferenceSummary", {
                     artists: form.artists.filter((item) => item.name.trim()).length,

@@ -1,6 +1,11 @@
 export { deduplicateEvents } from "./deduplication.js";
 export { enrichEvent, enrichValidationInput } from "./enrichment.js";
-export { DEFAULT_FORECAST_MONTHS, forecastEnd, forecastMonths } from "./forecast.js";
+export {
+  DEFAULT_FORECAST_MONTHS,
+  MAX_FORECAST_MONTHS,
+  forecastEnd,
+  forecastMonths
+} from "./forecast.js";
 export { estimateDrivingTravel, haversineMiles } from "./geo.js";
 export {
   buildRecommendationCandidatePool,

@@ -169,6 +169,18 @@ describe("buildRecommendations", () => {
     });
   });
 
+  it("uses the selected forecast window again after provider retrieval", () => {
+    const laterShow = event("later-exact-show", {
+      startAt: "2027-02-20T04:00:00.000Z",
+      performers: [{ name: "Wang Leehom", canonicalId: "artist:leehom" }]
+    });
+
+    expect(buildRecommendations(input({ forecastMonths: 4 }), [laterShow], { now: NOW }))
+      .toEqual([]);
+    expect(buildRecommendations(input({ forecastMonths: 6 }), [laterShow], { now: NOW }))
+      .toHaveLength(1);
+  });
+
   it("never treats a tribute show as an exact artist match", () => {
     const tribute = event("tribute", {
       name: "Wang Leehom Tribute Night",

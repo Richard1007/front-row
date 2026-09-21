@@ -21,7 +21,7 @@ function validInput(): ValidationInput {
 }
 
 describe("validateInput", () => {
-  it("trims values and defaults the fixed four-month window", () => {
+  it("trims values and defaults the forecast window to four months", () => {
     const input = validInput();
     input.artists[0]!.name = "  王力宏  ";
     const result = validateInput(input);
@@ -138,8 +138,16 @@ describe("validateInput", () => {
     expect(safeValidateInput({ ...validInput(), maxTravelMinutes: 361 }).success).toBe(false);
   });
 
-  it("rejects a non-four-month Milestone 0 window and invalid coordinates", () => {
-    expect(safeValidateInput({ ...validInput(), forecastMonths: 1 }).success).toBe(false);
+  it("accepts one through six calendar months and rejects invalid windows", () => {
+    expect(safeValidateInput({ ...validInput(), forecastMonths: 1 }).success).toBe(true);
+    expect(safeValidateInput({ ...validInput(), forecastMonths: 4 }).success).toBe(true);
+    expect(safeValidateInput({ ...validInput(), forecastMonths: 6 }).success).toBe(true);
+    expect(safeValidateInput({ ...validInput(), forecastMonths: 0 }).success).toBe(false);
+    expect(safeValidateInput({ ...validInput(), forecastMonths: 7 }).success).toBe(false);
+    expect(safeValidateInput({ ...validInput(), forecastMonths: 1.5 }).success).toBe(false);
+  });
+
+  it("rejects invalid coordinates", () => {
     expect(
       safeValidateInput({
         ...validInput(),
