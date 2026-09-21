@@ -86,4 +86,38 @@ describe("verifyLlmArtistExpansion", () => {
     expect(result).toHaveLength(2);
     expect(resolveArtist).toHaveBeenCalledTimes(2);
   });
+
+  it("keeps at most twelve verified artists and never verifies more than twenty", async () => {
+    const suggestions = Array.from({ length: 25 }, (_, index) => ({
+      name: `Candidate ${index}`,
+      relatedTo: ["陶喆"],
+      confidence: 0.9,
+      microgenres: ["neo-soul"],
+      rationale: "A fine-grained musical connection."
+    }));
+    const resolved = vi.fn(async (name: string) => ({
+      id: `${name}-id`,
+      name,
+      score: 100
+    }));
+
+    const accepted = await verifyLlmArtistExpansion(suggestions, preferences, {
+      resolveArtist: resolved,
+      maxCandidates: 100,
+      maxVerificationAttempts: 100
+    });
+
+    expect(accepted).toHaveLength(12);
+    expect(resolved).toHaveBeenCalledTimes(12);
+
+    const unresolved = vi.fn(async () => undefined);
+    const noneAccepted = await verifyLlmArtistExpansion(suggestions, preferences, {
+      resolveArtist: unresolved,
+      maxCandidates: 100,
+      maxVerificationAttempts: 100
+    });
+
+    expect(noneAccepted).toEqual([]);
+    expect(unresolved).toHaveBeenCalledTimes(20);
+  });
 });

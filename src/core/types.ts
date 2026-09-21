@@ -206,6 +206,15 @@ export interface ValidationResult {
       estimatedCostUsd?: number;
       message?: string;
     };
+    llmSelection?: {
+      status: "disabled" | "completed" | "failed";
+      model: string;
+      selectedEvents: number;
+      cached: boolean;
+      latencyMs?: number;
+      estimatedCostUsd?: number;
+      message?: string;
+    };
   };
   coverage: {
     rawEvents: number;

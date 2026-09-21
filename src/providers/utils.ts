@@ -5,6 +5,59 @@ import type {
   ProviderId,
   WeightedPreference,
 } from "../core/types";
+import { forecastEnd, forecastMonths } from "../core/forecast.js";
+
+export interface ForecastTimeBucket {
+  start: Date;
+  end: Date;
+}
+
+/**
+ * Split the complete forecast into contiguous calendar-month groups. A bounded
+ * number of buckets lets providers sample every part of the user's horizon
+ * without paging through an unbounded regional catalog.
+ */
+export function forecastTimeBuckets(
+  start: Date,
+  months: number | undefined,
+  maxBuckets: number,
+): ForecastTimeBucket[] {
+  const normalizedMonths = forecastMonths(months);
+  const bucketCount = Math.max(1, Math.min(normalizedMonths, Math.floor(maxBuckets)));
+  const buckets: ForecastTimeBucket[] = [];
+
+  for (let index = 0; index < bucketCount; index += 1) {
+    const startMonthOffset = Math.floor((index * normalizedMonths) / bucketCount);
+    const endMonthOffset = Math.floor(((index + 1) * normalizedMonths) / bucketCount);
+    buckets.push({
+      start: startMonthOffset === 0
+        ? new Date(start)
+        : forecastEnd(start, startMonthOffset),
+      end: forecastEnd(start, endMonthOffset),
+    });
+  }
+
+  return buckets;
+}
+
+/** Distribute a fixed result budget without allowing any request over its cap. */
+export function distributeProviderBudget(
+  total: number,
+  bucketCount: number,
+  maxPerBucket = 100,
+): number[] {
+  if (bucketCount <= 0 || total <= 0 || maxPerBucket <= 0) return [];
+  const safeTotal = Math.min(
+    Math.floor(total),
+    Math.floor(bucketCount) * Math.floor(maxPerBucket),
+  );
+  const base = Math.floor(safeTotal / bucketCount);
+  const remainder = safeTotal % bucketCount;
+  return Array.from(
+    { length: bucketCount },
+    (_, index) => base + (index < remainder ? 1 : 0),
+  );
+}
 
 export function preferredArtistQueryName(
   artist: Pick<WeightedPreference, "name" | "aliases">,

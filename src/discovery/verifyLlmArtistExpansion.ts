@@ -5,6 +5,9 @@ import type {
 import type { LlmArtistExpansionCandidate } from "./llmArtistExpansion.js";
 import type { ResolvedMusicBrainzArtist } from "./musicbrainz.js";
 
+const MAX_VERIFIED_CANDIDATES = 12;
+const MAX_VERIFICATION_ATTEMPTS = 20;
+
 export interface VerifyLlmArtistExpansionOptions {
   resolveArtist: (name: string) => Promise<ResolvedMusicBrainzArtist | undefined>;
   maxCandidates?: number;
@@ -21,10 +24,16 @@ export async function verifyLlmArtistExpansion(
   preferences: readonly WeightedPreference[],
   options: VerifyLlmArtistExpansionOptions
 ): Promise<ArtistExpansionCandidate[]> {
-  const maxCandidates = Math.max(0, Math.floor(options.maxCandidates ?? 4));
-  const maxAttempts = Math.max(
-    maxCandidates,
-    Math.floor(options.maxVerificationAttempts ?? Math.max(6, maxCandidates))
+  const maxCandidates = Math.min(
+    MAX_VERIFIED_CANDIDATES,
+    Math.max(0, Math.floor(options.maxCandidates ?? MAX_VERIFIED_CANDIDATES))
+  );
+  const maxAttempts = Math.min(
+    MAX_VERIFICATION_ATTEMPTS,
+    Math.max(
+      maxCandidates,
+      Math.floor(options.maxVerificationAttempts ?? MAX_VERIFICATION_ATTEMPTS)
+    )
   );
   const selectedNames = new Set(
     preferences.flatMap((artist) => [artist.name, ...(artist.aliases ?? [])]).map(normalizeName)

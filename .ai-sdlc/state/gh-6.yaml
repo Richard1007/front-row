@@ -1,0 +1,35 @@
+ticket: gh-6
+type: story
+phase: 07-complete
+complexity: complex
+depth_profile:
+  research: deep
+  refine: standard
+  design: light
+  architecture: standard
+  implementation: deep
+  qa: deep
+readiness:
+  status: PASS
+  notes:
+    - The user approved implementation after reviewing the live Ticketmaster 500-event experiment.
+    - Explicit artist recall remains independent from the regional candidate budget.
+    - Regional retrieval targets about 200 events across Ticketmaster and JamBase and covers the complete selected window.
+    - LLM expansion may suggest artists only; MusicBrainz and ticket providers continue to verify identity and event facts.
+    - Web search is explicitly out of scope for this iteration.
+acceptance_criteria:
+  - Time-stratified regional retrieval covers every selected month.
+  - Ticketmaster regional sampling uses relevance ordering instead of a single chronological first page.
+  - Provider request and candidate budgets remain bounded.
+  - Explicit artist events retain priority and final output remains concise.
+  - All automated tests and the production build pass.
+review:
+  status: PASS
+  tests: 222
+  build: PASS
+  live_smoke: PASS
+  notes:
+    - A four-month Oakland run returned 201 live listings and 196 unique events.
+    - Wang Leehom in San Jose on 2026-12-19 was preserved as the first T1 result.
+    - AI selected four additional provider-verified shows, producing a five-event shortlist.
+    - Repeating the same profile used both AI caches and reported zero additional model cost.
